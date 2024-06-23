@@ -41,7 +41,6 @@ from frigate.const import (
     MODEL_CACHE_DIR,
     RECORD_DIR,
 )
-from frigate.embeddings import manage_embeddings
 from frigate.embeddings import EmbeddingsContext, manage_embeddings
 from frigate.events.audio import listen_to_audio
 from frigate.events.cleanup import EventCleanup
