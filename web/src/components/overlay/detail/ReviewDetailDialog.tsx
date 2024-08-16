@@ -77,7 +77,7 @@ export default function ReviewDetailDialog({
 
       <Content
         className={
-          isDesktop ? "sm:max-w-xl" : "max-h-[75dvh] overflow-hidden p-2 pb-4"
+          isDesktop ? "sm:max-w-xl" : "max-h-[75dvh] overflow-x-hidden p-2 pb-4"
         }
       >
         {review && (
