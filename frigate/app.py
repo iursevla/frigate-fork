@@ -614,7 +614,7 @@ class FrigateApp:
                 (camera.detect.width * camera.detect.height * 1.5 * 9 + 270480)
                 / 1048576,
                 1,
-                )
+            )
 
         if available_shm < min_req_shm:
             logger.warning(
@@ -746,7 +746,7 @@ class FrigateApp:
         try:
             # Run the flask app inside fastapi: https://fastapi.tiangolo.com/advanced/sub-applications/
             self.fastapi_app.mount("", WSGIMiddleware(self.flask_app))
-            uvicorn.run(self.fastapi_app, host="127.0.0.1", port=5001, debug=False)
+            uvicorn.run(self.fastapi_app, host="127.0.0.1", port=5001)
         except KeyboardInterrupt:
             pass
 

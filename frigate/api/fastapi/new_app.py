@@ -2,7 +2,7 @@ import logging
 
 from fastapi import FastAPI
 
-from .routers import test
+from .routers import test, logs
 
 logger = logging.getLogger(__name__)
 
@@ -11,5 +11,6 @@ def create_fastapi_app(frigate_config, flask_app):
     logger.info("Starting FastAPI app")
     app = FastAPI(debug=False)
     app.include_router(test.router)
+    app.include_router(logs.router)
 
     return app

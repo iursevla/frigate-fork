@@ -454,91 +454,92 @@ def vainfo():
     )
 
 
-@bp.route("/logs/<service>", methods=["GET"])
-def logs(service: str):
-    def download_logs(service_location: str):
-        try:
-            file = open(service_location, "r")
-            contents = file.read()
-            file.close()
-            return jsonify(contents)
-        except FileNotFoundError as e:
-            logger.error(e)
-            return make_response(
-                jsonify({"success": False, "message": "Could not find log file"}),
-                500,
-            )
-
-    log_locations = {
-        "frigate": "/dev/shm/logs/frigate/current",
-        "go2rtc": "/dev/shm/logs/go2rtc/current",
-        "nginx": "/dev/shm/logs/nginx/current",
-        "chroma": "/dev/shm/logs/chroma/current",
-    }
-    service_location = log_locations.get(service)
-
-    if not service_location:
-        return make_response(
-            jsonify({"success": False, "message": "Not a valid service"}),
-            404,
-        )
-
-    if request.args.get("download", type=bool, default=False):
-        return download_logs(service_location)
-
-    start = request.args.get("start", type=int, default=0)
-    end = request.args.get("end", type=int)
-
-    try:
-        file = open(service_location, "r")
-        contents = file.read()
-        file.close()
-
-        # use the start timestamp to group logs together``
-        logLines = []
-        keyLength = 0
-        dateEnd = 0
-        currentKey = ""
-        currentLine = ""
-
-        for rawLine in contents.splitlines():
-            cleanLine = rawLine.strip()
-
-            if len(cleanLine) < 10:
-                continue
-
-            # handle cases where S6 does not include date in log line
-            if "  " not in cleanLine:
-                cleanLine = f"{datetime.now()}  {cleanLine}"
-
-            if dateEnd == 0:
-                dateEnd = cleanLine.index("  ")
-                keyLength = dateEnd - (6 if service_location == "frigate" else 0)
-
-            newKey = cleanLine[0:keyLength]
-
-            if newKey == currentKey:
-                currentLine += f"\n{cleanLine[dateEnd:].strip()}"
-                continue
-            else:
-                if len(currentLine) > 0:
-                    logLines.append(currentLine)
-
-                currentKey = newKey
-                currentLine = cleanLine
-
-        logLines.append(currentLine)
-
-        return make_response(
-            jsonify({"totalLines": len(logLines), "lines": logLines[start:end]}),
-            200,
-        )
-    except FileNotFoundError as e:
-        logger.error(e)
-        return make_response(
-            jsonify({"success": False, "message": "Could not find log file"}),
-            500,
-        )
+# TODO: Replace with fastapi
+# @bp.route("/logs/<service>", methods=["GET"])
+# def logs(service: str):
+#     def download_logs(service_location: str):
+#         try:
+#             file = open(service_location, "r")
+#             contents = file.read()
+#             file.close()
+#             return jsonify(contents)
+#         except FileNotFoundError as e:
+#             logger.error(e)
+#             return make_response(
+#                 jsonify({"success": False, "message": "Could not find log file"}),
+#                 500,
+#             )
+#
+#     log_locations = {
+#         "frigate": "/dev/shm/logs/frigate/current",
+#         "go2rtc": "/dev/shm/logs/go2rtc/current",
+#         "nginx": "/dev/shm/logs/nginx/current",
+#         "chroma": "/dev/shm/logs/chroma/current",
+#     }
+#     service_location = log_locations.get(service)
+#
+#     if not service_location:
+#         return make_response(
+#             jsonify({"success": False, "message": "Not a valid service"}),
+#             404,
+#         )
+#
+#     if request.args.get("download", type=bool, default=False):
+#         return download_logs(service_location)
+#
+#     start = request.args.get("start", type=int, default=0)
+#     end = request.args.get("end", type=int)
+#
+#     try:
+#         file = open(service_location, "r")
+#         contents = file.read()
+#         file.close()
+#
+#         # use the start timestamp to group logs together``
+#         logLines = []
+#         keyLength = 0
+#         dateEnd = 0
+#         currentKey = ""
+#         currentLine = ""
+#
+#         for rawLine in contents.splitlines():
+#             cleanLine = rawLine.strip()
+#
+#             if len(cleanLine) < 10:
+#                 continue
+#
+#             # handle cases where S6 does not include date in log line
+#             if "  " not in cleanLine:
+#                 cleanLine = f"{datetime.now()}  {cleanLine}"
+#
+#             if dateEnd == 0:
+#                 dateEnd = cleanLine.index("  ")
+#                 keyLength = dateEnd - (6 if service_location == "frigate" else 0)
+#
+#             newKey = cleanLine[0:keyLength]
+#
+#             if newKey == currentKey:
+#                 currentLine += f"\n{cleanLine[dateEnd:].strip()}"
+#                 continue
+#             else:
+#                 if len(currentLine) > 0:
+#                     logLines.append(currentLine)
+#
+#                 currentKey = newKey
+#                 currentLine = cleanLine
+#
+#         logLines.append(currentLine)
+#
+#         return make_response(
+#             jsonify({"totalLines": len(logLines), "lines": logLines[start:end]}),
+#             200,
+#         )
+#     except FileNotFoundError as e:
+#         logger.error(e)
+#         return make_response(
+#             jsonify({"success": False, "message": "Could not find log file"}),
+#             500,
+#         )
 
 
 @bp.route("/restart", methods=["POST"])
