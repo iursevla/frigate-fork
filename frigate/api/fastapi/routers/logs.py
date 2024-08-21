@@ -16,7 +16,7 @@ def logs(
     service: str,
     download: Optional[str] = None,
     start: Optional[int] = 0,
-    end: Optional[int] = 0,
+    end: Optional[int] = None,
 ):
     def download_logs(service_location: str):
         try:
