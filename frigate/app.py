@@ -746,7 +746,13 @@ class FrigateApp:
         try:
             # Run the flask app inside fastapi: https://fastapi.tiangolo.com/advanced/sub-applications/
             self.fastapi_app.mount("", WSGIMiddleware(self.flask_app))
-            uvicorn.run(self.fastapi_app, host="127.0.0.1", port=5001)
+            uvicorn.run(
+                self.fastapi_app,
+                host="127.0.0.1",
+                port=5001,
+                timeout_keep_alive=0,
+                http="httptools",
+            )
         except KeyboardInterrupt:
             pass
 

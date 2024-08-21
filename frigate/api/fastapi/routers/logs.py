@@ -48,9 +48,6 @@ def logs(
     if download:
         return download_logs(service_location)
 
-    # start = request.args.get("start", type=int, default=0)
-    # end = request.args.get("end", type=int)
-
     try:
         file = open(service_location, "r")
         contents = file.read()

@@ -5,6 +5,8 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import pytz
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 from flask import (
     Blueprint,
     jsonify,
@@ -17,6 +19,8 @@ from frigate.models import Previews
 logger = logging.getLogger(__name__)
 
 PreviewBp = Blueprint("previews", __name__)
+
+router = APIRouter()
 
 
 @PreviewBp.route("/preview/<camera_name>/start/<int:start_ts>/end/<int:end_ts>")
@@ -89,11 +93,8 @@ def preview_hour(year_month, day, hour, camera_name, tz_name):
     return preview_ts(camera_name, start_ts, end_ts)
 
 
-@PreviewBp.route("/preview/<camera_name>/start/<int:start_ts>/end/<int:end_ts>/frames")
-@PreviewBp.route(
-    "/preview/<camera_name>/start/<float:start_ts>/end/<float:end_ts>/frames"
-)
-def get_preview_frames_from_cache(camera_name: str, start_ts, end_ts):
+@router.get("/preview/{camera_name}/start/{start_ts}/end/{end_ts}/frames")
+def get_preview_frames_from_cache(camera_name: str, start_ts: float, end_ts: float):
     """Get list of cached preview frames"""
     preview_dir = os.path.join(CACHE_DIR, "preview_frames")
     file_start = f"preview_{camera_name}"
@@ -113,4 +114,6 @@ def get_preview_frames_from_cache(camera_name: str, start_ts, end_ts):
 
         selected_previews.append(file)
 
-    return jsonify(selected_previews)
+    return JSONResponse(
+        content=selected_previews,
+    )
