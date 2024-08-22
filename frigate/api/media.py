@@ -137,7 +137,6 @@ def latest_frame(
             request.app.detected_frames_processor.get_current_frame_time(camera_name)
             + retry_interval
         ):
-            # TODO: Won't this always be true?
             if request.app.camera_error_image is None:
                 error_image = glob.glob("/opt/frigate/frigate/images/camera-error.jpg")
 
