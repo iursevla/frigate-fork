@@ -24,7 +24,6 @@ tags_metadata = [
 ]
 
 
-# TODO: This should follow the same pattern as the flask app.
 def create_fastapi_app(frigate_config, detected_frames_processor):
     logger.info("Starting FastAPI app")
     app = FastAPI(debug=False, tags_metadata=tags_metadata)
