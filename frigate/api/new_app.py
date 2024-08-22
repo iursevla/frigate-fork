@@ -2,8 +2,8 @@ import logging
 
 from fastapi import FastAPI
 
-from .. import app as main_app
-from .. import media, preview
+from frigate.api import app as main_app
+from frigate.api import media, preview
 
 logger = logging.getLogger(__name__)
 

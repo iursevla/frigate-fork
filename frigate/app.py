@@ -23,7 +23,7 @@ from pydantic import ValidationError
 
 from frigate.api.app import create_app
 from frigate.api.auth import hash_password
-from frigate.api.fastapi.new_app import create_fastapi_app
+from frigate.api.new_app import create_fastapi_app
 from frigate.comms.config_updater import ConfigPublisher
 from frigate.comms.dispatcher import Communicator, Dispatcher
 from frigate.comms.inter_process import InterProcessCommunicator
