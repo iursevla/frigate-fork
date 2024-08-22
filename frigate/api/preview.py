@@ -93,7 +93,9 @@ def preview_hour(year_month, day, hour, camera_name, tz_name):
     return preview_ts(camera_name, start_ts, end_ts)
 
 
-@router.get("/preview/{camera_name}/start/{start_ts}/end/{end_ts}/frames")
+@router.get(
+    "/preview/{camera_name}/start/{start_ts}/end/{end_ts}/frames", tags=["Preview"]
+)
 def get_preview_frames_from_cache(camera_name: str, start_ts: float, end_ts: float):
     """Get list of cached preview frames"""
     preview_dir = os.path.join(CACHE_DIR, "preview_frames")

@@ -7,11 +7,23 @@ from .routers import logs, test
 
 logger = logging.getLogger(__name__)
 
+# https://fastapi.tiangolo.com/tutorial/metadata/#use-your-tags
+tags_metadata = [
+    {
+        "name": "Preview",
+        "description": "Preview related routes",
+    },
+    {
+        "name": "Logs",
+        "description": "Logs related routes",
+    },
+]
+
 
 # TODO: This should follow the same pattern as the flask app.
 def create_fastapi_app(frigate_config, flask_app):
     logger.info("Starting FastAPI app")
-    app = FastAPI(debug=False)
+    app = FastAPI(debug=False, tags_metadata=tags_metadata)
     app.include_router(test.router)
     app.include_router(logs.router)
     app.include_router(preview.router)

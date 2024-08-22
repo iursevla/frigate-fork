@@ -11,13 +11,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/logs/{service}")
+@router.get("/logs/{service}", tags=["Logs"])
 def logs(
     service: str,
     download: Optional[str] = None,
     start: Optional[int] = 0,
     end: Optional[int] = None,
 ):
+    """Get logs for the requested service (frigate/nginx/go2rtc/chroma)"""
+
     def download_logs(service_location: str):
         try:
             file = open(service_location, "r")
