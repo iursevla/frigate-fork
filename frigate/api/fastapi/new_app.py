@@ -4,7 +4,6 @@ from fastapi import FastAPI
 
 from .. import app as main_app
 from .. import media, preview
-from .routers import test
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,6 @@ tags_metadata = [
 def create_fastapi_app(frigate_config, detected_frames_processor):
     logger.info("Starting FastAPI app")
     app = FastAPI(debug=False, tags_metadata=tags_metadata)
-    app.include_router(test.router)
     app.include_router(preview.router)
     app.include_router(media.router)
     app.include_router(main_app.router)
