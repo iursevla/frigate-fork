@@ -16,7 +16,7 @@ import numpy as np
 import pytz
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from flask import Blueprint, Response, current_app, jsonify, make_response, request
+from flask import Blueprint, current_app, jsonify, make_response, request
 from peewee import DoesNotExist, fn
 from tzlocal import get_localzone_name
 from werkzeug.utils import secure_filename
@@ -39,38 +39,49 @@ MediaBp = Blueprint("media", __name__)
 router = APIRouter(tags=["Media"])
 
 
-@MediaBp.route("/<camera_name>")
-def mjpeg_feed(camera_name):
-    fps = int(request.args.get("fps", "3"))
-    height = int(request.args.get("h", "360"))
+@router.get("/media/{camera_name}")
+def mjpeg_feed(
+    request: Request,
+    camera_name: str,
+    fps: int = 3,
+    height: int = 360,
+    bbox: Optional[int] = None,
+    timestamp: Optional[int] = None,
+    zones: Optional[int] = None,
+    mask: Optional[int] = None,
+    motion: Optional[int] = None,
+    regions: Optional[int] = None,
+):
     draw_options = {
-        "bounding_boxes": request.args.get("bbox", type=int),
-        "timestamp": request.args.get("timestamp", type=int),
-        "zones": request.args.get("zones", type=int),
-        "mask": request.args.get("mask", type=int),
-        "motion_boxes": request.args.get("motion", type=int),
-        "regions": request.args.get("regions", type=int),
+        "bounding_boxes": bbox,
+        "timestamp": timestamp,
+        "zones": zones,
+        "mask": mask,
+        "motion_boxes": motion,
+        "regions": regions,
     }
-    if camera_name in current_app.frigate_config.cameras:
+    if camera_name in request.app.frigate_config.cameras:
         # return a multipart response
-        return Response(
+        return StreamingResponse(
             imagestream(
-                current_app.detected_frames_processor,
+                request.app.detected_frames_processor,
                 camera_name,
                 fps,
                 height,
                 draw_options,
             ),
-            mimetype="multipart/x-mixed-replace; boundary=frame",
+            media_type="multipart/x-mixed-replace;boundary=frame",
         )
     else:
-        return make_response(
-            jsonify({"success": False, "message": "Camera not found"}),
-            404,
+        return JSONResponse(
+            content={"success": False, "message": "Camera not found"},
+            status_code=404,
         )
 
 
-def imagestream(detected_frames_processor, camera_name, fps, height, draw_options):
+def imagestream(
+    detected_frames_processor, camera_name: str, fps: int, height: int, draw_options
+):
     while True:
         # max out at specified FPS
         time.sleep(1 / fps)
@@ -84,7 +95,7 @@ def imagestream(detected_frames_processor, camera_name, fps, height, draw_option
         ret, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
         yield (
             b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n" + jpg.tobytes() + b"\r\n\r\n"
+            b"Content-Type: image/jpeg\r\n\r\n" + bytearray(jpg.tobytes()) + b"\r\n\r\n"
         )
 
 
@@ -103,17 +114,17 @@ def camera_ptz_info(request: Request, camera_name: str):
 
 @router.get("/{camera_name}/latest.{extension}")
 def latest_frame(
-        request: Request,
-        camera_name: str,
-        extension: str,  # jpg/jpeg/png/webp
-        bbox: Optional[int] = None,
-        timestamp: Optional[int] = None,
-        zones: Optional[int] = None,
-        mask: Optional[int] = None,
-        motion: Optional[int] = None,
-        regions: Optional[int] = None,
-        quality: Optional[int] = 70,
-        h: Optional[int] = None,
+    request: Request,
+    camera_name: str,
+    extension: str,  # jpg/jpeg/png/webp
+    bbox: Optional[int] = None,
+    timestamp: Optional[int] = None,
+    zones: Optional[int] = None,
+    mask: Optional[int] = None,
+    motion: Optional[int] = None,
+    regions: Optional[int] = None,
+    quality: Optional[int] = 70,
+    h: Optional[int] = None,
 ):
     draw_options = {
         "bounding_boxes": bbox,
