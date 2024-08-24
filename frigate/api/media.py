@@ -111,7 +111,6 @@ def latest_frame(
     regions: Optional[int] = None,
     quality: Optional[int] = 70,
     h: Optional[int] = None,
-    # TODO: Responses see: https://stackoverflow.com/a/67497103 for swagger info
 ):
     draw_options = {
         "bounding_boxes": bbox,
