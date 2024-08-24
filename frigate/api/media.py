@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 MediaBp = Blueprint("media", __name__)
 
-router = APIRouter()
+router = APIRouter(tags=["Media"])
 
 
 @MediaBp.route("/<camera_name>")

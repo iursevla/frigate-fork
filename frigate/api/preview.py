@@ -14,10 +14,10 @@ from frigate.models import Previews
 logger = logging.getLogger(__name__)
 
 
-router = APIRouter()
+router = APIRouter(tags=["Preview"])
 
 
-@router.get("/preview/{camera_name}/start/{start_ts}/end/{end_ts}", tags=["Preview"])
+@router.get("/preview/{camera_name}/start/{start_ts}/end/{end_ts}")
 def preview_ts(camera_name: str, start_ts: float, end_ts: float):
     """Get all mp4 previews relevant for time period."""
     if camera_name != "all":
@@ -70,9 +70,7 @@ def preview_ts(camera_name: str, start_ts: float, end_ts: float):
     return JSONResponse(content=clips, status_code=200)
 
 
-@router.get(
-    "/preview/{year_month}/{day}/{hour}/{camera_name}/{tz_name}", tags=["Preview"]
-)
+@router.get("/preview/{year_month}/{day}/{hour}/{camera_name}/{tz_name}")
 def preview_hour(year_month: str, day: int, hour: int, camera_name: str, tz_name: str):
     """Get all mp4 previews relevant for time period given the timezone"""
     parts = year_month.split("-")
@@ -87,9 +85,7 @@ def preview_hour(year_month: str, day: int, hour: int, camera_name: str, tz_name
     return preview_ts(camera_name, start_ts, end_ts)
 
 
-@router.get(
-    "/preview/{camera_name}/start/{start_ts}/end/{end_ts}/frames", tags=["Preview"]
-)
+@router.get("/preview/{camera_name}/start/{start_ts}/end/{end_ts}/frames")
 def get_preview_frames_from_cache(camera_name: str, start_ts: float, end_ts: float):
     """Get list of cached preview frames"""
     preview_dir = os.path.join(CACHE_DIR, "preview_frames")
