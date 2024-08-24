@@ -752,7 +752,6 @@ class FrigateApp:
                 port=5001,
                 http="auto",
                 timeout_keep_alive=0,
-                http="httptools",
             )
         except KeyboardInterrupt:
             pass
