@@ -750,6 +750,7 @@ class FrigateApp:
                 self.fastapi_app,
                 host="127.0.0.1",
                 port=5001,
+                http="h11",
                 timeout_keep_alive=0,
                 http="httptools",
             )
