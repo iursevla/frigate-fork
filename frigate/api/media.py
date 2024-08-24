@@ -98,8 +98,7 @@ def camera_ptz_info(camera_name):
             404,
         )
 
-
-@router.get("/{camera_name}/latest.{extension}", tags=["Media"])
+@router.get("/{camera_name}/latest.{extension}")
 def latest_frame(
     request: Request,
     camera_name: str,
