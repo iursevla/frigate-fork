@@ -400,7 +400,9 @@ class FrigateApp:
             self.stats_emitter,
         )
 
-        self.fastapi_app = create_fastapi_app(self.config, self.detected_frames_processor)
+        self.fastapi_app = create_fastapi_app(
+            self.config, self.detected_frames_processor
+        )
 
     def init_onvif(self) -> None:
         self.onvif_controller = OnvifController(self.config, self.ptz_metrics)
@@ -750,8 +752,6 @@ class FrigateApp:
                 self.fastapi_app,
                 host="127.0.0.1",
                 port=5001,
-                http="auto",
-                timeout_keep_alive=0,
             )
         except KeyboardInterrupt:
             pass
