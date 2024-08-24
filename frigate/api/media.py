@@ -14,7 +14,7 @@ from urllib.parse import unquote
 import cv2
 import numpy as np
 import pytz
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from flask import Blueprint, current_app, jsonify, make_response, request
 from peewee import DoesNotExist, fn
@@ -39,6 +39,7 @@ MediaBp = Blueprint("media", __name__)
 router = APIRouter(tags=["Media"])
 
 
+# NOTICE: Is this endpoint still in use? It's conflicting with /auth
 @router.get("/media/{camera_name}")
 def mjpeg_feed(
     request: Request,
@@ -211,15 +212,14 @@ def latest_frame(
         )
 
 
-@MediaBp.route("/<camera_name>/recordings/<frame_time>/snapshot.png")
-def get_snapshot_from_recording(camera_name: str, frame_time: str):
-    if camera_name not in current_app.frigate_config.cameras:
-        return make_response(
-            jsonify({"success": False, "message": "Camera not found"}),
-            404,
+@router.get("/{camera_name}/recordings/{frame_time}/snapshot.png")
+def get_snapshot_from_recording(request: Request, camera_name: str, frame_time: float):
+    if camera_name not in request.app.frigate_config.cameras:
+        return JSONResponse(
+            content={"success": False, "message": "Camera not found"},
+            status_code=404,
         )
 
-    frame_time = float(frame_time)
     recording_query = (
         Recordings.select(
             Recordings.path,
@@ -242,28 +242,21 @@ def get_snapshot_from_recording(camera_name: str, frame_time: str):
         image_data = get_image_from_recording(recording.path, time_in_segment)
 
         if not image_data:
-            return make_response(
-                jsonify(
-                    {
-                        "success": False,
-                        "message": f"Unable to parse frame at time {frame_time}",
-                    }
-                ),
-                404,
-            )
-
-        response = make_response(image_data)
-        response.headers["Content-Type"] = "image/png"
-        return response
-    except DoesNotExist:
-        return make_response(
-            jsonify(
-                {
+            return JSONResponse(
+                content={
                     "success": False,
-                    "message": "Recording not found at {}".format(frame_time),
-                }
-            ),
-            404,
+                    "message": f"Unable to parse frame at time {frame_time}",
+                },
+                status_code=404,
+            )
+        return Response(image_data, headers={"Content-Type": "image/png"})
+    except DoesNotExist:
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "Recording not found at {}".format(frame_time),
+            },
+            status_code=404,
         )
 
 
