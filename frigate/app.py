@@ -756,7 +756,7 @@ class FrigateApp:
         except KeyboardInterrupt:
             pass
 
-        logger.info("Flask has exited...")
+        logger.info("FastAPI/Flask has exited...")
 
         self.stop()
 
