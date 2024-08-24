@@ -88,15 +88,18 @@ def imagestream(detected_frames_processor, camera_name, fps, height, draw_option
         )
 
 
-@MediaBp.route("/<camera_name>/ptz/info")
-def camera_ptz_info(camera_name):
-    if camera_name in current_app.frigate_config.cameras:
-        return jsonify(current_app.onvif.get_camera_info(camera_name))
-    else:
-        return make_response(
-            jsonify({"success": False, "message": "Camera not found"}),
-            404,
+@router.get("/{camera_name}/ptz/info")
+def camera_ptz_info(request: Request, camera_name: str):
+    if camera_name in request.app.frigate_config.cameras:
+        return JSONResponse(
+            content=request.app.onvif.get_camera_info(camera_name),
         )
+    else:
+        return JSONResponse(
+            content={"success": False, "message": "Camera not found"},
+            status_code=404,
+        )
+
 
 @router.get("/{camera_name}/latest.{extension}")
 def latest_frame(
