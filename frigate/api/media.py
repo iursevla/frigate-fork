@@ -539,7 +539,6 @@ def recording_clip(camera_name: str, start_ts: float, end_ts: float, download: b
         path,
         media_type="video/mp4",
         filename=file_name,
-        content_disposition_type="attachment",
         headers=headers,
     )
 
