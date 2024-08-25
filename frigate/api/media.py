@@ -146,8 +146,8 @@ def latest_frame(
         )
 
         if frame is None or datetime.now().timestamp() > (
-                request.app.detected_frames_processor.get_current_frame_time(camera_name)
-                + retry_interval
+            request.app.detected_frames_processor.get_current_frame_time(camera_name)
+            + retry_interval
         ):
             if request.app.camera_error_image is None:
                 error_image = glob.glob("/opt/frigate/frigate/images/camera-error.jpg")
@@ -325,9 +325,9 @@ def submit_recording_snapshot_to_plus(camera_name: str, frame_time: str):
         )
 
 
-@MediaBp.route("/recordings/storage", methods=["GET"])
-def get_recordings_storage_usage():
-    recording_stats = current_app.stats_emitter.get_latest_stats()["service"][
+@router.get("/recordings/storage")
+def get_recordings_storage_usage(request: Request):
+    recording_stats = request.app.stats_emitter.get_latest_stats()["service"][
         "storage"
     ][RECORD_DIR]
 
@@ -337,7 +337,7 @@ def get_recordings_storage_usage():
     total_mb = recording_stats["total"]
 
     camera_usages: dict[str, dict] = (
-        current_app.storage_maintainer.calculate_camera_usages()
+        request.app.storage_maintainer.calculate_camera_usages()
     )
 
     for camera_name in camera_usages.keys():
@@ -346,7 +346,7 @@ def get_recordings_storage_usage():
                 camera_usages.get(camera_name, {}).get("usage", 0) / total_mb
             ) * 100
 
-    return jsonify(camera_usages)
+    return JSONResponse(content=camera_usages)
 
 
 # return hourly summary for recordings of camera
