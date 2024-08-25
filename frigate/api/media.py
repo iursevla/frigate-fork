@@ -607,18 +607,18 @@ def vod_ts(camera_name: str, start_ts: float, end_ts: float):
     )
 
 
-@MediaBp.route("/vod/<year_month>/<day>/<hour>/<camera_name>")
-def vod_hour_no_timezone(year_month, day, hour, camera_name):
+@router.get("/vod/{year_month}/{day}/{hour}/{camera_name}")
+def vod_hour_no_timezone(year_month: str, day: int, hour: int, camera_name: str):
     return vod_hour(
         year_month, day, hour, camera_name, get_localzone_name().replace("/", ",")
     )
 
 
-@MediaBp.route("/vod/<year_month>/<day>/<hour>/<camera_name>/<tz_name>")
-def vod_hour(year_month, day, hour, camera_name, tz_name):
+@router.get("/vod/{year_month}/{day}/{hour}/{camera_name}/{tz_name}")
+def vod_hour(year_month: str, day: int, hour: int, camera_name: str, tz_name: str):
     parts = year_month.split("-")
     start_date = (
-        datetime(int(parts[0]), int(parts[1]), int(day), int(hour), tzinfo=timezone.utc)
+        datetime(int(parts[0]), int(parts[1]), day, hour, tzinfo=timezone.utc)
         - datetime.now(pytz.timezone(tz_name.replace(",", "/"))).utcoffset()
     )
     end_date = start_date + timedelta(hours=1) - timedelta(milliseconds=1)
