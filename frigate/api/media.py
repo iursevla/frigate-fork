@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 import pytz
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from flask import Blueprint, current_app, jsonify, make_response, request
 from peewee import DoesNotExist, fn
 from tzlocal import get_localzone_name
@@ -535,7 +535,13 @@ def recording_clip(camera_name: str, start_ts: float, end_ts: float, download: b
     if download:
         headers["Content-Disposition"] = "attachment; filename=%s" % file_name
 
-    return Response(headers=headers)
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        filename=file_name,
+        content_disposition_type="attachment",
+        headers=headers,
+    )
 
 
 @MediaBp.route("/vod/<camera_name>/start/<int:start_ts>/end/<int:end_ts>")
