@@ -411,13 +411,13 @@ def recordings_summary(camera_name: str, timezone: str = "utc"):
     return JSONResponse(content=list(days.values()))
 
 
-# return hour of recordings data for camera
 @router.get("/{camera_name}/recordings")
 def recordings(
     camera_name: str,
     after: float = (datetime.now() - timedelta(hours=1)).timestamp(),
     before: float = datetime.now().timestamp(),
 ):
+    """Return specific camera recordings between the given 'after'/'end' times. If not provided the last hour will be used"""
     recordings = (
         Recordings.select(
             Recordings.id,
