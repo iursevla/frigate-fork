@@ -412,13 +412,12 @@ def recordings_summary(camera_name: str, timezone: str = "utc"):
 
 
 # return hour of recordings data for camera
-@MediaBp.route("/<camera_name>/recordings")
-def recordings(camera_name):
-    after = request.args.get(
-        "after", type=float, default=(datetime.now() - timedelta(hours=1)).timestamp()
-    )
-    before = request.args.get("before", type=float, default=datetime.now().timestamp())
-
+@router.get("/{camera_name}/recordings")
+def recordings(
+    camera_name: str,
+    after: float = (datetime.now() - timedelta(hours=1)).timestamp(),
+    before: float = datetime.now().timestamp(),
+):
     recordings = (
         Recordings.select(
             Recordings.id,
@@ -439,7 +438,7 @@ def recordings(camera_name):
         .iterator()
     )
 
-    return jsonify(list(recordings))
+    return JSONResponse(content=list(recordings))
 
 
 @MediaBp.route("/<camera_name>/start/<int:start_ts>/end/<int:end_ts>/clip.mp4")
