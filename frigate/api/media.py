@@ -441,11 +441,8 @@ def recordings(
     return JSONResponse(content=list(recordings))
 
 
-@MediaBp.route("/<camera_name>/start/<int:start_ts>/end/<int:end_ts>/clip.mp4")
-@MediaBp.route("/<camera_name>/start/<float:start_ts>/end/<float:end_ts>/clip.mp4")
-def recording_clip(camera_name, start_ts, end_ts):
-    download = request.args.get("download", type=bool)
-
+@router.get("/{camera_name}/start/{start_ts}/end/{end_ts}/clip.mp4")
+def recording_clip(camera_name: str, start_ts: float, end_ts: float, download: bool):
     recordings = (
         Recordings.select(
             Recordings.path,
@@ -475,11 +472,12 @@ def recording_clip(camera_name, start_ts, end_ts):
     file_name = f"clip_{camera_name}_{start_ts}-{end_ts}.mp4"
 
     if len(file_name) > 1000:
-        return make_response(
-            jsonify(
-                {"success": False, "message": "Filename exceeded max length of 1000"}
-            ),
-            403,
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "Filename exceeded max length of 1000",
+            },
+            status_code=403,
         )
 
     file_name = secure_filename(file_name)
@@ -513,32 +511,31 @@ def recording_clip(camera_name, start_ts, end_ts):
 
         if p.returncode != 0:
             logger.error(p.stderr)
-            return make_response(
-                jsonify(
-                    {
-                        "success": False,
-                        "message": "Could not create clip from recordings",
-                    }
-                ),
-                500,
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "Could not create clip from recordings",
+                },
+                status_code=500,
             )
     else:
         logger.debug(
             f"Ignoring subsequent request for {path} as it already exists in the cache."
         )
 
-    response = make_response()
-    response.headers["Content-Description"] = "File Transfer"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Content-Type"] = "video/mp4"
-    if download:
-        response.headers["Content-Disposition"] = "attachment; filename=%s" % file_name
-    response.headers["Content-Length"] = os.path.getsize(path)
-    response.headers["X-Accel-Redirect"] = (
-        f"/clips/cache/{file_name}"  # nginx: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ignore_headers
-    )
+    headers = {
+        "Content-Description": "File Transfer",
+        "Cache-Control": "no-cache",
+        "Content-Type": "video/mp4",
+        "Content-Length": str(os.path.getsize(path)),
+        # nginx: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ignore_headers
+        "X-Accel-Redirect": f"/clips/cache/{file_name}",
+    }
 
-    return response
+    if download:
+        headers["Content-Disposition"] = "attachment; filename=%s" % file_name
+
+    return Response(headers=headers)
 
 
 @MediaBp.route("/vod/<camera_name>/start/<int:start_ts>/end/<int:end_ts>")
