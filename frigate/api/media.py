@@ -543,9 +543,8 @@ def recording_clip(camera_name: str, start_ts: float, end_ts: float, download: b
     )
 
 
-@MediaBp.route("/vod/<camera_name>/start/<int:start_ts>/end/<int:end_ts>")
-@MediaBp.route("/vod/<camera_name>/start/<float:start_ts>/end/<float:end_ts>")
-def vod_ts(camera_name, start_ts, end_ts):
+@router.get("/vod/{camera_name}/start/{start_ts}/end/{end_ts}")
+def vod_ts(camera_name: str, start_ts: float, end_ts: float):
     recordings = (
         Recordings.select(Recordings.path, Recordings.duration, Recordings.end_time)
         .where(
@@ -587,19 +586,17 @@ def vod_ts(camera_name, start_ts, end_ts):
         logger.error(
             f"No recordings found for {camera_name} during the requested time range"
         )
-        return make_response(
-            jsonify(
-                {
-                    "success": False,
-                    "message": "No recordings found.",
-                }
-            ),
-            404,
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "No recordings found.",
+            },
+            status_code=404,
         )
 
     hour_ago = datetime.now() - timedelta(hours=1)
-    return jsonify(
-        {
+    return JSONResponse(
+        content={
             "cache": hour_ago.timestamp() > start_ts,
             "discontinuity": False,
             "consistentSequenceMediaInfo": True,
