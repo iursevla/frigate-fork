@@ -349,11 +349,10 @@ def get_recordings_storage_usage(request: Request):
     return JSONResponse(content=camera_usages)
 
 
-# return hourly summary for recordings of camera
-@MediaBp.route("/<camera_name>/recordings/summary")
-def recordings_summary(camera_name):
-    tz_name = request.args.get("timezone", default="utc", type=str)
-    hour_modifier, minute_modifier, seconds_offset = get_tz_modifiers(tz_name)
+@router.get("/{camera_name}/recordings/summary")
+def recordings_summary(camera_name: str, timezone: str = "utc"):
+    """Returns hourly summary for recordings of given camera"""
+    hour_modifier, minute_modifier, seconds_offset = get_tz_modifiers(timezone)
     recording_groups = (
         Recordings.select(
             fn.strftime(
@@ -409,7 +408,7 @@ def recordings_summary(camera_name):
             days[day]["events"] += events_count
             days[day]["hours"].append(hour_data)
 
-    return jsonify(list(days.values()))
+    return JSONResponse(content=list(days.values()))
 
 
 # return hour of recordings data for camera
