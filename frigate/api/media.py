@@ -616,6 +616,7 @@ def vod_hour_no_timezone(year_month: str, day: int, hour: int, camera_name: str)
 
 @router.get("/vod/{year_month}/{day}/{hour}/{camera_name}/{tz_name}")
 def vod_hour(year_month: str, day: int, hour: int, camera_name: str, tz_name: str):
+    """VOD for specific hour. Uses the default timezone (UTC)."""
     parts = year_month.split("-")
     start_date = (
         datetime(int(parts[0]), int(parts[1]), day, hour, tzinfo=timezone.utc)
