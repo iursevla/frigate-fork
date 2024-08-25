@@ -609,6 +609,7 @@ def vod_ts(camera_name: str, start_ts: float, end_ts: float):
 
 @router.get("/vod/{year_month}/{day}/{hour}/{camera_name}")
 def vod_hour_no_timezone(year_month: str, day: int, hour: int, camera_name: str):
+    """VOD for specific hour. Uses the default timezone (UTC)."""
     return vod_hour(
         year_month, day, hour, camera_name, get_localzone_name().replace("/", ",")
     )
@@ -616,7 +617,6 @@ def vod_hour_no_timezone(year_month: str, day: int, hour: int, camera_name: str)
 
 @router.get("/vod/{year_month}/{day}/{hour}/{camera_name}/{tz_name}")
 def vod_hour(year_month: str, day: int, hour: int, camera_name: str, tz_name: str):
-    """VOD for specific hour. Uses the default timezone (UTC)."""
     parts = year_month.split("-")
     start_date = (
         datetime(int(parts[0]), int(parts[1]), day, hour, tzinfo=timezone.utc)
@@ -629,32 +629,28 @@ def vod_hour(year_month: str, day: int, hour: int, camera_name: str, tz_name: st
     return vod_ts(camera_name, start_ts, end_ts)
 
 
-@MediaBp.route("/vod/event/<id>")
-def vod_event(id):
+@router.get("/vod/event/{event_id}")
+def vod_event(event_id: str):
     try:
-        event: Event = Event.get(Event.id == id)
+        event: Event = Event.get(Event.id == event_id)
     except DoesNotExist:
-        logger.error(f"Event not found: {id}")
-        return make_response(
-            jsonify(
-                {
-                    "success": False,
-                    "message": "Event not found.",
-                }
-            ),
-            404,
+        logger.error(f"Event not found: {event_id}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "Event not found.",
+            },
+            status_code=404,
         )
 
     if not event.has_clip:
-        logger.error(f"Event does not have recordings: {id}")
-        return make_response(
-            jsonify(
-                {
-                    "success": False,
-                    "message": "Recordings not available.",
-                }
-            ),
-            404,
+        logger.error(f"Event does not have recordings: {event_id}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "Recordings not available.",
+            },
+            status_code=404,
         )
 
     clip_path = os.path.join(CLIPS_DIR, f"{event.camera}-{event.id}.mp4")
@@ -671,12 +667,12 @@ def vod_event(id):
             and len(vod_response) == 2
             and vod_response[1] == 404
         ):
-            Event.update(has_clip=False).where(Event.id == id).execute()
+            Event.update(has_clip=False).where(Event.id == event_id).execute()
         return vod_response
 
     duration = int((event.end_time - event.start_time) * 1000)
-    return jsonify(
-        {
+    return JSONResponse(
+        content={
             "cache": True,
             "discontinuity": False,
             "durations": [duration],
