@@ -681,8 +681,9 @@ def vod_event(event_id: str):
     )
 
 
-@MediaBp.route("/<camera_name>/<label>/snapshot.jpg")
-def label_snapshot(camera_name, label):
+@router.get("/{camera_name}/{label}/snapshot.jpg")
+def label_snapshot(camera_name: str, label: str):
+    """Returns the snapshot image from the latest event for the given camera and label combo"""
     label = unquote(label)
     if label == "any":
         event_query = (
@@ -707,9 +708,10 @@ def label_snapshot(camera_name, label):
         frame = np.zeros((720, 1280, 3), np.uint8)
         ret, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
 
-        response = make_response(jpg.tobytes())
-        response.headers["Content-Type"] = "image/jpeg"
-        return response
+        return StreamingResponse(
+            io.BytesIO(jpg.tobytes()),
+            media_type="image/jpeg",
+        )
 
 
 @MediaBp.route("/<camera_name>/<label>/best.jpg")
@@ -948,17 +950,17 @@ def event_snapshot_clean(id):
     return response
 
 
-@MediaBp.route("/events/<id>/snapshot.jpg")
-def event_snapshot(id):
-    download = request.args.get("download", type=bool)
+@router.get("/events/{event_id}/snapshot.jpg")
+def event_snapshot(event_id: str, download: bool = False):
     event_complete = False
     jpg_bytes = None
     try:
-        event = Event.get(Event.id == id, Event.end_time != None)
+        event = Event.get(Event.id == event_id, Event.end_time != None)
         event_complete = True
         if not event.has_snapshot:
-            return make_response(
-                jsonify({"success": False, "message": "Snapshot not available"}), 404
+            return JSONResponse(
+                content={"success": False, "message": "Snapshot not available"},
+                status_code=404,
             )
         # read snapshot from disk
         with open(
@@ -970,8 +972,8 @@ def event_snapshot(id):
         try:
             camera_states = current_app.detected_frames_processor.camera_states.values()
             for camera_state in camera_states:
-                if id in camera_state.tracked_objects:
-                    tracked_obj = camera_state.tracked_objects.get(id)
+                if event_id in camera_state.tracked_objects:
+                    tracked_obj = camera_state.tracked_objects.get(event_id)
                     if tracked_obj is not None:
                         jpg_bytes = tracked_obj.get_jpg_bytes(
                             timestamp=request.args.get("timestamp", type=int),
@@ -981,30 +983,33 @@ def event_snapshot(id):
                             quality=request.args.get("quality", default=70, type=int),
                         )
         except Exception:
-            return make_response(
-                jsonify({"success": False, "message": "Event not found"}), 404
+            return JSONResponse(
+                content={"success": False, "message": "Event not found"},
+                status_code=404,
             )
     except Exception:
-        return make_response(
-            jsonify({"success": False, "message": "Event not found"}), 404
+        return JSONResponse(
+            content={"success": False, "message": "Event not found"}, status_code=404
         )
 
     if jpg_bytes is None:
-        return make_response(
-            jsonify({"success": False, "message": "Event not found"}), 404
+        return JSONResponse(
+            content={"success": False, "message": "Event not found"}, status_code=404
         )
 
-    response = make_response(jpg_bytes)
-    response.headers["Content-Type"] = "image/jpeg"
-    if event_complete:
-        response.headers["Cache-Control"] = "private, max-age=31536000"
-    else:
-        response.headers["Cache-Control"] = "no-store"
+    headers = {
+        "Content-Type": "image/jpeg",
+        "Cache-Control": "private, max-age=31536000" if event_complete else "no-store",
+    }
+
     if download:
-        response.headers["Content-Disposition"] = (
-            f"attachment; filename=snapshot-{id}.jpg"
-        )
-    return response
+        headers["Content-Disposition"] = f"attachment; filename=snapshot-{event_id}.jpg"
+
+    return StreamingResponse(
+        io.BytesIO(jpg_bytes),
+        media_type="image/jpeg",
+        headers=headers,
+    )
 
 
 @MediaBp.route("/events/<id>/clip.mp4")
