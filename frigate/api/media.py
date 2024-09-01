@@ -956,7 +956,7 @@ def event_snapshot_clean(request: Request, event_id: str, download: bool = False
 
     return StreamingResponse(
         io.BytesIO(png_bytes),
-        media_type="image/jpeg",
+        media_type="image/png",
         headers=headers,
     )
 
@@ -1131,13 +1131,13 @@ def event_thumbnail(
     )
 
 
-@MediaBp.route("/events/<id>/preview.gif")
-def event_preview(id: str):
+@router.get("/events/{event_id}/preview.gif")
+def event_preview(event_id: str):
     try:
-        event: Event = Event.get(Event.id == id)
+        event: Event = Event.get(Event.id == event_id)
     except DoesNotExist:
-        return make_response(
-            jsonify({"success": False, "message": "Event not found"}), 404
+        return JSONResponse(
+            content={"success": False, "message": "Event not found"}, status_code=404
         )
 
     start_ts = event.start_time
@@ -1147,9 +1147,15 @@ def event_preview(id: str):
     return preview_gif(event.camera, start_ts, end_ts)
 
 
-@MediaBp.route("/<camera_name>/start/<int:start_ts>/end/<int:end_ts>/preview.gif")
-@MediaBp.route("/<camera_name>/start/<float:start_ts>/end/<float:end_ts>/preview.gif")
-def preview_gif(camera_name: str, start_ts, end_ts, max_cache_age=2592000):
+@router.get("/{camera_name}/start/{start_ts}/end/{end_ts}/preview.gif")
+def preview_gif(
+    camera_name: str,
+    start_ts: float,
+    end_ts: float,
+    max_cache_age: int = Query(
+        2592000, description="Max cache age in seconds. Default 30 days in seconds."
+    ),
+):
     if datetime.fromtimestamp(start_ts) < datetime.now().replace(minute=0, second=0):
         # has preview mp4
         preview: Previews = (
@@ -1171,8 +1177,9 @@ def preview_gif(camera_name: str, start_ts, end_ts, max_cache_age=2592000):
         )
 
         if not preview:
-            return make_response(
-                jsonify({"success": False, "message": "Preview not found"}), 404
+            return JSONResponse(
+                content={"success": False, "message": "Preview not found"},
+                status_code=404,
             )
 
         diff = start_ts - preview.start_time
@@ -1209,9 +1216,9 @@ def preview_gif(camera_name: str, start_ts, end_ts, max_cache_age=2592000):
 
         if process.returncode != 0:
             logger.error(process.stderr)
-            return make_response(
-                jsonify({"success": False, "message": "Unable to create preview gif"}),
-                500,
+            return JSONResponse(
+                content={"success": False, "message": "Unable to create preview gif"},
+                status_code=500,
             )
 
         gif_bytes = process.stdout
@@ -1237,8 +1244,8 @@ def preview_gif(camera_name: str, start_ts, end_ts, max_cache_age=2592000):
             selected_previews.append("duration 0.12")
 
         if not selected_previews:
-            return make_response(
-                jsonify({"success": False, "message": "Preview not found"}), 404
+            return JSONResponse(
+                content={"success": False, "message": "Preview not found"}, status_code=404
             )
 
         last_file = selected_previews[-2]
@@ -1275,17 +1282,21 @@ def preview_gif(camera_name: str, start_ts, end_ts, max_cache_age=2592000):
 
         if process.returncode != 0:
             logger.error(process.stderr)
-            return make_response(
-                jsonify({"success": False, "message": "Unable to create preview gif"}),
-                500,
+            return JSONResponse(
+                content={"success": False, "message": "Unable to create preview gif"},
+                status_code=500,
             )
 
         gif_bytes = process.stdout
 
-    response = make_response(gif_bytes)
-    response.headers["Content-Type"] = "image/gif"
-    response.headers["Cache-Control"] = f"private, max-age={max_cache_age}"
-    return response
+    return StreamingResponse(
+        io.BytesIO(gif_bytes),
+        media_type="image/gif",
+        headers={
+            "Cache-Control": f"private, max-age={max_cache_age}",
+            "Content-Type": "image/gif",
+        },
+    )
 
 
 @MediaBp.route("/<camera_name>/start/<int:start_ts>/end/<int:end_ts>/preview.mp4")
