@@ -400,7 +400,14 @@ class FrigateApp:
             self.stats_emitter,
         )
 
-        self.fastapi_app = create_fastapi_app(self.config, self.detected_frames_processor,  self.storage_maintainer, self.onvif_controller, self.stats_emitter)
+        self.fastapi_app = create_fastapi_app(
+            self.config,
+            self.detected_frames_processor,
+            self.storage_maintainer,
+            self.onvif_controller,
+            self.plus_api,
+            self.stats_emitter,
+        )
 
     def init_onvif(self) -> None:
         self.onvif_controller = OnvifController(self.config, self.ptz_metrics)
