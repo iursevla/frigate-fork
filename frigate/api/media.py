@@ -16,7 +16,7 @@ import numpy as np
 import pytz
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from flask import Blueprint, current_app, jsonify, make_response, request
+from flask import Blueprint, jsonify, make_response, request
 from peewee import DoesNotExist, fn
 from tzlocal import get_localzone_name
 from werkzeug.utils import secure_filename
@@ -260,12 +260,14 @@ def get_snapshot_from_recording(request: Request, camera_name: str, frame_time: 
         )
 
 
-@MediaBp.route("/<camera_name>/plus/<frame_time>", methods=("POST",))
-def submit_recording_snapshot_to_plus(camera_name: str, frame_time: str):
-    if camera_name not in current_app.frigate_config.cameras:
-        return make_response(
-            jsonify({"success": False, "message": "Camera not found"}),
-            404,
+@router.post("/{camera_name}/plus/{frame_time}")
+def submit_recording_snapshot_to_plus(
+    request: Request, camera_name: str, frame_time: str
+):
+    if camera_name not in request.app.frigate_config.cameras:
+        return JSONResponse(
+            content={"success": False, "message": "Camera not found"},
+            status_code=404,
         )
 
     frame_time = float(frame_time)
@@ -291,37 +293,31 @@ def submit_recording_snapshot_to_plus(camera_name: str, frame_time: str):
         image_data = get_image_from_recording(recording.path, time_in_segment)
 
         if not image_data:
-            return make_response(
-                jsonify(
-                    {
-                        "success": False,
-                        "message": f"Unable to parse frame at time {frame_time}",
-                    }
-                ),
-                404,
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": f"Unable to parse frame at time {frame_time}",
+                },
+                status_code=404,
             )
 
         nd = cv2.imdecode(np.frombuffer(image_data, dtype=np.int8), cv2.IMREAD_COLOR)
-        current_app.plus_api.upload_image(nd, camera_name)
+        request.app.plus_api.upload_image(nd, camera_name)
 
-        return make_response(
-            jsonify(
-                {
-                    "success": True,
-                    "message": "Successfully submitted image.",
-                }
-            ),
-            200,
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Successfully submitted image.",
+            },
+            status_code=200,
         )
     except DoesNotExist:
-        return make_response(
-            jsonify(
-                {
-                    "success": False,
-                    "message": "Recording not found at {}".format(frame_time),
-                }
-            ),
-            404,
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "Recording not found at {}".format(frame_time),
+            },
+            status_code=404,
         )
 
 
@@ -682,7 +678,7 @@ def vod_event(event_id: str):
 
 
 @router.get("/{camera_name}/{label}/snapshot.jpg")
-def label_snapshot(camera_name: str, label: str):
+def label_snapshot(request: Request, camera_name: str, label: str):
     """Returns the snapshot image from the latest event for the given camera and label combo"""
     label = unquote(label)
     if label == "any":
@@ -703,7 +699,7 @@ def label_snapshot(camera_name: str, label: str):
 
     try:
         event = event_query.get()
-        return event_snapshot(event.id)
+        return event_snapshot(request, event.id)
     except DoesNotExist:
         frame = np.zeros((720, 1280, 3), np.uint8)
         ret, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
@@ -962,7 +958,16 @@ def event_snapshot_clean(request: Request, event_id: str, download: bool = False
 
 
 @router.get("/events/{event_id}/snapshot.jpg")
-def event_snapshot(event_id: str, download: bool = False):
+def event_snapshot(
+    request: Request,
+    event_id: str,
+    download: bool = False,
+    timestamp: Optional[int] = None,
+    bbox: Optional[int] = None,
+    crop: Optional[int] = None,
+    h: Optional[int] = None,
+    quality: Optional[int] = 70,
+):
     event_complete = False
     jpg_bytes = None
     try:
@@ -981,17 +986,17 @@ def event_snapshot(event_id: str, download: bool = False):
     except DoesNotExist:
         # see if the object is currently being tracked
         try:
-            camera_states = current_app.detected_frames_processor.camera_states.values()
+            camera_states = request.app.detected_frames_processor.camera_states.values()
             for camera_state in camera_states:
                 if event_id in camera_state.tracked_objects:
                     tracked_obj = camera_state.tracked_objects.get(event_id)
                     if tracked_obj is not None:
                         jpg_bytes = tracked_obj.get_jpg_bytes(
-                            timestamp=request.args.get("timestamp", type=int),
-                            bounding_box=request.args.get("bbox", type=int),
-                            crop=request.args.get("crop", type=int),
-                            height=request.args.get("h", type=int),
-                            quality=request.args.get("quality", default=70, type=int),
+                            timestamp=timestamp,
+                            bounding_box=bbox,
+                            crop=crop,
+                            height=h,
+                            quality=quality,
                         )
         except Exception:
             return JSONResponse(
@@ -1245,7 +1250,8 @@ def preview_gif(
 
         if not selected_previews:
             return JSONResponse(
-                content={"success": False, "message": "Preview not found"}, status_code=404
+                content={"success": False, "message": "Preview not found"},
+                status_code=404,
             )
 
         last_file = selected_previews[-2]

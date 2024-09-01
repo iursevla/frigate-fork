@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from frigate.api import app as main_app
 from frigate.api import media, preview
+from frigate.plus import PlusApi
 from frigate.ptz.onvif import OnvifController
 from frigate.stats.emitter import StatsEmitter
 from frigate.storage import StorageMaintainer
@@ -28,8 +29,12 @@ tags_metadata = [
 
 
 def create_fastapi_app(
-        frigate_config, detected_frames_processor, storage_maintainer: StorageMaintainer, onvif: OnvifController,
-        stats_emitter: StatsEmitter
+    frigate_config,
+    detected_frames_processor,
+    storage_maintainer: StorageMaintainer,
+    onvif: OnvifController,
+    plus_api: PlusApi,
+    stats_emitter: StatsEmitter,
 ):
     logger.info("Starting FastAPI app")
     app = FastAPI(debug=False, tags_metadata=tags_metadata)
@@ -41,6 +46,7 @@ def create_fastapi_app(
     app.storage_maintainer = storage_maintainer
     app.camera_error_image = None
     app.onvif = onvif
+    app.plus_api = plus_api
     app.stats_emitter = stats_emitter
 
     return app
