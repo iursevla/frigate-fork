@@ -161,7 +161,7 @@ export default function ReviewDetailDialog({
                     draggable={false}
                     src={
                       event.has_snapshot
-                        ? `${apiHost}api/events/${event.id}/snapshot.jpg`
+                        ? `${apiHost}api/media/events/${event.id}/snapshot.jpg`
                         : `${apiHost}api/media/events/${event.id}/thumbnail.jpg`
                     }
                     onClick={() => {

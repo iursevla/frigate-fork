@@ -22,7 +22,6 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from frigate.api.auth import AuthBp, get_jwt_secret, limiter
 from frigate.api.event import EventBp
 from frigate.api.export import ExportBp
-from frigate.api.media import MediaBp
 from frigate.api.notification import NotificationBp
 from frigate.api.review import ReviewBp
 from frigate.config import FrigateConfig
@@ -47,7 +46,6 @@ logger = logging.getLogger(__name__)
 bp = Blueprint("frigate", __name__)
 bp.register_blueprint(EventBp)
 bp.register_blueprint(ExportBp)
-bp.register_blueprint(MediaBp)
 bp.register_blueprint(ReviewBp)
 bp.register_blueprint(AuthBp)
 bp.register_blueprint(NotificationBp)
@@ -458,10 +456,10 @@ def vainfo():
 
 @router.get("/logs/{service}", tags=["Logs"])
 def logs(
-        service: str,
-        download: Optional[str] = None,
-        start: Optional[int] = 0,
-        end: Optional[int] = None,
+    service: str,
+    download: Optional[str] = None,
+    start: Optional[int] = 0,
+    end: Optional[int] = None,
 ):
     """Get logs for the requested service (frigate/nginx/go2rtc/chroma)"""
 

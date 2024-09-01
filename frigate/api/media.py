@@ -37,8 +37,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Media"])
 
 
-# NOTICE: Is this endpoint still in use? It's conflicting with /auth
-@router.get("/media/{camera_name}")
+@router.get("/media/camera/{camera_name}")
 def mjpeg_feed(
     request: Request,
     camera_name: str,
@@ -98,7 +97,7 @@ def imagestream(
         )
 
 
-@router.get("/{camera_name}/ptz/info")
+@router.get("/media/camera/{camera_name}/ptz/info")
 def camera_ptz_info(request: Request, camera_name: str):
     if camera_name in request.app.frigate_config.cameras:
         return JSONResponse(
@@ -111,11 +110,11 @@ def camera_ptz_info(request: Request, camera_name: str):
         )
 
 
-@router.get("/{camera_name}/latest.{extension}")
+@router.get("/media/camera/{camera_name}/frame/latest")
 def latest_frame(
     request: Request,
     camera_name: str,
-    extension: str,  # jpg/jpeg/png/webp
+    extension: Optional[str] = Query("webp", enum=["webp", "png", "jpg", "jpeg"]),
     bbox: Optional[int] = None,
     timestamp: Optional[int] = None,
     zones: Optional[int] = None,
@@ -210,7 +209,7 @@ def latest_frame(
         )
 
 
-@router.get("/{camera_name}/recordings/{frame_time}/snapshot.png")
+@router.get("/media/camera/{camera_name}/recordings/{frame_time}/snapshot.png")
 def get_snapshot_from_recording(request: Request, camera_name: str, frame_time: float):
     if camera_name not in request.app.frigate_config.cameras:
         return JSONResponse(
@@ -258,7 +257,7 @@ def get_snapshot_from_recording(request: Request, camera_name: str, frame_time: 
         )
 
 
-@router.post("/{camera_name}/plus/{frame_time}")
+@router.post("/media/camera/{camera_name}/plus/{frame_time}")
 def submit_recording_snapshot_to_plus(
     request: Request, camera_name: str, frame_time: str
 ):
@@ -319,7 +318,7 @@ def submit_recording_snapshot_to_plus(
         )
 
 
-@router.get("/recordings/storage")
+@router.get("/media/recordings/storage")
 def get_recordings_storage_usage(request: Request):
     recording_stats = request.app.stats_emitter.get_latest_stats()["service"][
         "storage"
@@ -343,7 +342,7 @@ def get_recordings_storage_usage(request: Request):
     return JSONResponse(content=camera_usages)
 
 
-@router.get("/{camera_name}/recordings/summary")
+@router.get("/media/camera/{camera_name}/recordings/summary")
 def recordings_summary(camera_name: str, timezone: str = "utc"):
     """Returns hourly summary for recordings of given camera"""
     hour_modifier, minute_modifier, seconds_offset = get_tz_modifiers(timezone)
@@ -405,7 +404,7 @@ def recordings_summary(camera_name: str, timezone: str = "utc"):
     return JSONResponse(content=list(days.values()))
 
 
-@router.get("/{camera_name}/recordings")
+@router.get("/media/camera/{camera_name}/recordings")
 def recordings(
     camera_name: str,
     after: float = (datetime.now() - timedelta(hours=1)).timestamp(),
@@ -435,8 +434,10 @@ def recordings(
     return JSONResponse(content=list(recordings))
 
 
-@router.get("/{camera_name}/start/{start_ts}/end/{end_ts}/clip.mp4")
-def recording_clip(camera_name: str, start_ts: float, end_ts: float, download: bool):
+@router.get("/media/camera/{camera_name}/start/{start_ts}/end/{end_ts}/clip.mp4")
+def recording_clip(
+    camera_name: str, start_ts: float, end_ts: float, download: bool = False
+):
     recordings = (
         Recordings.select(
             Recordings.path,
@@ -675,7 +676,7 @@ def vod_event(event_id: str):
     )
 
 
-@router.get("/{camera_name}/{label}/snapshot.jpg")
+@router.get("/media/camera/{camera_name}/label/{label}/snapshot.jpg")
 def label_snapshot(request: Request, camera_name: str, label: str):
     """Returns the snapshot image from the latest event for the given camera and label combo"""
     label = unquote(label)
@@ -708,8 +709,8 @@ def label_snapshot(request: Request, camera_name: str, label: str):
         )
 
 
-@router.get("/{camera_name}/{label}/best.jpg")
-@router.get("/{camera_name}/{label}/thumbnail.jpg")
+@router.get("/media/camera/{camera_name}/label/{label}/best.jpg")
+@router.get("/media/camera/{camera_name}/label/{label}/thumbnail.jpg")
 def label_thumbnail(request: Request, camera_name: str, label: str):
     label = unquote(label)
     event_query = Event.select(fn.MAX(Event.id)).where(Event.camera == camera_name)
@@ -731,7 +732,7 @@ def label_thumbnail(request: Request, camera_name: str, label: str):
         )
 
 
-@router.get("/camera/{camera_name}/{label}/clip.mp4")
+@router.get("/media/camera/{camera_name}/label/{label}/clip.mp4")
 def label_clip(camera_name: str, label: str):
     label = unquote(label)
     event_query = Event.select(fn.MAX(Event.id)).where(
@@ -750,7 +751,7 @@ def label_clip(camera_name: str, label: str):
         )
 
 
-@router.get("/{camera_name}/grid.jpg")
+@router.get("/media/camera/{camera_name}/grid.jpg")
 def grid_snapshot(
     request: Request, camera_name: str, color: str = "", font_scale: float = 0.5
 ):
@@ -871,7 +872,7 @@ def grid_snapshot(
         )
 
 
-@router.get("/events/{event_id}/snapshot-clean.png")
+@router.get("/media/events/{event_id}/snapshot-clean.png")
 def event_snapshot_clean(request: Request, event_id: str, download: bool = False):
     png_bytes = None
     try:
@@ -955,7 +956,7 @@ def event_snapshot_clean(request: Request, event_id: str, download: bool = False
     )
 
 
-@router.get("/events/{event_id}/snapshot.jpg")
+@router.get("/media/events/{event_id}/snapshot.jpg")
 def event_snapshot(
     request: Request,
     event_id: str,
@@ -1026,7 +1027,7 @@ def event_snapshot(
     )
 
 
-@router.get("/events/{event_id}/clip.mp4")
+@router.get("/media/events/{event_id}/clip.mp4")
 def event_clip(event_id: str, download: bool = False):
     try:
         event: Event = Event.get(Event.id == event_id)
@@ -1134,7 +1135,7 @@ def event_thumbnail(
     )
 
 
-@router.get("/events/{event_id}/preview.gif")
+@router.get("/media/events/{event_id}/preview.gif")
 def event_preview(event_id: str):
     try:
         event: Event = Event.get(Event.id == event_id)
@@ -1150,7 +1151,7 @@ def event_preview(event_id: str):
     return preview_gif(event.camera, start_ts, end_ts)
 
 
-@router.get("/{camera_name}/start/{start_ts}/end/{end_ts}/preview.gif")
+@router.get("/media/camera/{camera_name}/start/{start_ts}/end/{end_ts}/preview.gif")
 def preview_gif(
     camera_name: str,
     start_ts: float,
@@ -1303,7 +1304,7 @@ def preview_gif(
     )
 
 
-@router.get("/{camera_name}/start/{start_ts}/end/{end_ts}/preview.mp4")
+@router.get("/media/camera/{camera_name}/start/{start_ts}/end/{end_ts}/preview.mp4")
 def preview_mp4(
     camera_name: str,
     start_ts: float,
@@ -1476,7 +1477,7 @@ def preview_mp4(
     )
 
 
-@router.get("/review/{event_id}/preview")
+@router.get("/media/review/{event_id}/preview")
 def review_preview(
     event_id: str,
     format: str = Query(default="gif", enum=["gif", "mp4"]),
@@ -1501,8 +1502,8 @@ def review_preview(
         return preview_mp4(review.camera, start_ts, end_ts)
 
 
-@router.get("/preview/{file_name}/thumbnail.jpg")
-@router.get("/preview/{file_name}/thumbnail.webp")
+@router.get("/media/preview/{file_name}/thumbnail.jpg")
+@router.get("/media/preview/{file_name}/thumbnail.webp")
 def preview_thumbnail(file_name: str):
     """Get a thumbnail from the cached preview frames."""
     if len(file_name) > 1000:
