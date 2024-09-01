@@ -756,20 +756,20 @@ def label_clip(camera_name: str, label: str):
         )
 
 
-@MediaBp.route("/<camera_name>/grid.jpg")
-def grid_snapshot(camera_name):
-    request.args.get("type", default="region")
-
-    if camera_name in current_app.frigate_config.cameras:
-        detect = current_app.frigate_config.cameras[camera_name].detect
-        frame = current_app.detected_frames_processor.get_current_frame(camera_name, {})
+@router.get("/{camera_name}/grid.jpg")
+def grid_snapshot(
+    request: Request, camera_name: str, color: str = "", font_scale: float = 0.5
+):
+    if camera_name in request.app.frigate_config.cameras:
+        detect = request.app.frigate_config.cameras[camera_name].detect
+        frame = request.app.detected_frames_processor.get_current_frame(camera_name, {})
         retry_interval = float(
-            current_app.frigate_config.cameras.get(camera_name).ffmpeg.retry_interval
+            request.app.frigate_config.cameras.get(camera_name).ffmpeg.retry_interval
             or 10
         )
 
         if frame is None or datetime.now().timestamp() > (
-            current_app.detected_frames_processor.get_current_frame_time(camera_name)
+            request.app.detected_frames_processor.get_current_frame_time(camera_name)
             + retry_interval
         ):
             return make_response(
@@ -790,8 +790,7 @@ def grid_snapshot(camera_name):
                 500,
             )
 
-        color_arg = request.args.get("color", default="", type=str).lower()
-        draw_font_scale = request.args.get("font_scale", default=0.5, type=float)
+        color_arg = color.lower()
 
         if color_arg == "red":
             draw_color = (0, 0, 255)
@@ -802,7 +801,7 @@ def grid_snapshot(camera_name):
         elif color_arg == "white":
             draw_color = (255, 255, 255)
         else:
-            draw_color = (0, 255, 0)
+            draw_color = (0, 255, 0) # green
 
         grid_size = len(grid)
         grid_coef = 1.0 / grid_size
@@ -835,7 +834,7 @@ def grid_snapshot(camera_name):
                         int((y * grid_coef + 0.02) * height),
                     ),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    fontScale=draw_font_scale,
+                    fontScale=font_scale,
                     color=draw_color,
                     thickness=2,
                 )
@@ -847,7 +846,7 @@ def grid_snapshot(camera_name):
                         int((y * grid_coef + 0.05) * height),
                     ),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    fontScale=draw_font_scale,
+                    fontScale=font_scale,
                     color=draw_color,
                     thickness=2,
                 )
@@ -859,20 +858,22 @@ def grid_snapshot(camera_name):
                         int((y * grid_coef + 0.08) * height),
                     ),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    fontScale=draw_font_scale,
+                    fontScale=font_scale,
                     color=draw_color,
                     thickness=2,
                 )
 
         ret, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
-        response = make_response(jpg.tobytes())
-        response.headers["Content-Type"] = "image/jpeg"
-        response.headers["Cache-Control"] = "no-store"
-        return response
+
+        return StreamingResponse(
+            io.BytesIO(jpg.tobytes()),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store"},
+        )
     else:
-        return make_response(
-            jsonify({"success": False, "message": "Camera not found"}),
-            404,
+        return JSONResponse(
+            content={"success": False, "message": "Camera not found"},
+            status_code=404,
         )
 
 
