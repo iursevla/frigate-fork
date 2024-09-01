@@ -737,7 +737,7 @@ def label_thumbnail(request: Request, camera_name: str, label: str):
         )
 
 
-@MediaBp.route("/<camera_name>/<label>/clip.mp4")
+@MediaBp.route("/camera/<camera_name>/<label>/clip.mp4")
 def label_clip(camera_name, label):
     label = unquote(label)
     event_query = Event.select(fn.MAX(Event.id)).where(
@@ -1013,20 +1013,18 @@ def event_snapshot(event_id: str, download: bool = False):
     )
 
 
-@MediaBp.route("/events/<id>/clip.mp4")
-def event_clip(id):
-    download = request.args.get("download", type=bool)
-
+@router.get("/events/{event_id}/clip.mp4")
+def event_clip(event_id: str, download: bool = False):
     try:
-        event: Event = Event.get(Event.id == id)
+        event: Event = Event.get(Event.id == event_id)
     except DoesNotExist:
-        return make_response(
-            jsonify({"success": False, "message": "Event not found"}), 404
+        return JSONResponse(
+            content={"success": False, "message": "Event not found"}, status_code=404
         )
 
     if not event.has_clip:
-        return make_response(
-            jsonify({"success": False, "message": "Clip not available"}), 404
+        return JSONResponse(
+            content={"success": False, "message": "Clip not available"}, status_code=404
         )
 
     file_name = f"{event.camera}-{event.id}.mp4"
@@ -1036,20 +1034,26 @@ def event_clip(id):
         end_ts = (
             datetime.now().timestamp() if event.end_time is None else event.end_time
         )
-        return recording_clip(event.camera, event.start_time, end_ts)
+        return recording_clip(event.camera, event.start_time, end_ts, download)
 
-    response = make_response()
-    response.headers["Content-Description"] = "File Transfer"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Content-Type"] = "video/mp4"
+    headers = {
+        "Content-Description": "File Transfer",
+        "Cache-Control": "no-cache",
+        "Content-Type": "video/mp4",
+        "Content-Length": str(os.path.getsize(clip_path)),
+        # nginx: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ignore_headers
+        "X-Accel-Redirect": f"/clips/{file_name}",
+    }
+
     if download:
-        response.headers["Content-Disposition"] = "attachment; filename=%s" % file_name
-    response.headers["Content-Length"] = os.path.getsize(clip_path)
-    response.headers["X-Accel-Redirect"] = (
-        f"/clips/{file_name}"  # nginx: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ignore_headers
-    )
+        headers["Content-Disposition"] = "attachment; filename=%s" % file_name
 
-    return response
+    return FileResponse(
+        clip_path,
+        media_type="video/mp4",
+        filename=file_name,
+        headers=headers,
+    )
 
 
 @router.get("/media/events/{event_id}/thumbnail.jpg")
