@@ -162,7 +162,7 @@ export default function ReviewDetailDialog({
                     src={
                       event.has_snapshot
                         ? `${apiHost}api/events/${event.id}/snapshot.jpg`
-                        : `${apiHost}api/events/${event.id}/thumbnail.jpg`
+                        : `${apiHost}api/media/events/${event.id}/thumbnail.jpg`
                     }
                     onClick={() => {
                       if (

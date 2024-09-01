@@ -126,7 +126,7 @@ export default function SearchDetailDialog({
                       : undefined
                   }
                   draggable={false}
-                  src={`${apiHost}api/events/${search.id}/thumbnail.jpg`}
+                  src={`${apiHost}api/media/events/${search.id}/thumbnail.jpg`}
                 />
                 <Button
                   onClick={() => {

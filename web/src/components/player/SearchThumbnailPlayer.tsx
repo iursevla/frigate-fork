@@ -191,7 +191,7 @@ export default function SearchThumbnailPlayer({
               : undefined
           }
           draggable={false}
-          src={`${apiHost}api/events/${searchResult.id}/thumbnail.jpg`}
+          src={`${apiHost}api/media/events/${searchResult.id}/thumbnail.jpg`}
           loading={isSafari ? "eager" : "lazy"}
           onLoad={() => {
             onImgLoad();

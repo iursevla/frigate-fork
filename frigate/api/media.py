@@ -14,7 +14,7 @@ from urllib.parse import unquote
 import cv2
 import numpy as np
 import pytz
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from flask import Blueprint, current_app, jsonify, make_response, request
 from peewee import DoesNotExist, fn
@@ -714,26 +714,27 @@ def label_snapshot(camera_name: str, label: str):
         )
 
 
-@MediaBp.route("/<camera_name>/<label>/best.jpg")
-@MediaBp.route("/<camera_name>/<label>/thumbnail.jpg")
-def label_thumbnail(camera_name, label):
+@router.get("/{camera_name}/{label}/best.jpg")
+@router.get("/{camera_name}/{label}/thumbnail.jpg")
+def label_thumbnail(request: Request, camera_name: str, label: str):
     label = unquote(label)
     event_query = Event.select(fn.MAX(Event.id)).where(Event.camera == camera_name)
     if label != "any":
         event_query = event_query.where(Event.label == label)
 
     try:
-        event = event_query.scalar()
+        event_id = event_query.scalar()
 
-        return event_thumbnail(event, 60)
+        return event_thumbnail(request, event_id, 60)
     except DoesNotExist:
         frame = np.zeros((175, 175, 3), np.uint8)
         ret, jpg = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
 
-        response = make_response(jpg.tobytes())
-        response.headers["Content-Type"] = "image/jpeg"
-        response.headers["Cache-Control"] = "no-store"
-        return response
+        return StreamingResponse(
+            io.BytesIO(jpg.tobytes()),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store"},
+        )
 
 
 @MediaBp.route("/<camera_name>/<label>/clip.mp4")
@@ -1051,33 +1052,41 @@ def event_clip(id):
     return response
 
 
-@MediaBp.route("/events/<id>/thumbnail.jpg")
-def event_thumbnail(id, max_cache_age=2592000):
-    format = request.args.get("format", "ios")
+@router.get("/media/events/{event_id}/thumbnail.jpg")
+def event_thumbnail(
+    request: Request,
+    event_id: str,
+    max_cache_age: int = Query(
+        2592000, description="Max cache age in seconds. Default 30 days in seconds."
+    ),
+    format: str = Query(default="ios", enum=["ios", "android"]),
+):
     thumbnail_bytes = None
     event_complete = False
     try:
-        event = Event.get(Event.id == id)
+        event = Event.get(Event.id == event_id)
         if event.end_time is not None:
             event_complete = True
         thumbnail_bytes = base64.b64decode(event.thumbnail)
     except DoesNotExist:
         # see if the object is currently being tracked
         try:
-            camera_states = current_app.detected_frames_processor.camera_states.values()
+            camera_states = request.app.detected_frames_processor.camera_states.values()
             for camera_state in camera_states:
-                if id in camera_state.tracked_objects:
-                    tracked_obj = camera_state.tracked_objects.get(id)
+                if event_id in camera_state.tracked_objects:
+                    tracked_obj = camera_state.tracked_objects.get(event_id)
                     if tracked_obj is not None:
                         thumbnail_bytes = tracked_obj.get_thumbnail()
         except Exception:
-            return make_response(
-                jsonify({"success": False, "message": "Event not found"}), 404
+            return JSONResponse(
+                content={"success": False, "message": "Event not found"},
+                status_code=404,
             )
 
     if thumbnail_bytes is None:
-        return make_response(
-            jsonify({"success": False, "message": "Event not found"}), 404
+        return JSONResponse(
+            content={"success": False, "message": "Event not found"},
+            status_code=404,
         )
 
     # android notifications prefer a 2:1 ratio
@@ -1096,13 +1105,16 @@ def event_thumbnail(id, max_cache_age=2592000):
         ret, jpg = cv2.imencode(".jpg", thumbnail, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
         thumbnail_bytes = jpg.tobytes()
 
-    response = make_response(thumbnail_bytes)
-    response.headers["Content-Type"] = "image/jpeg"
-    if event_complete:
-        response.headers["Cache-Control"] = f"private, max-age={max_cache_age}"
-    else:
-        response.headers["Cache-Control"] = "no-store"
-    return response
+    return StreamingResponse(
+        io.BytesIO(thumbnail_bytes),
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": f"private, max-age={max_cache_age}"
+            if event_complete
+            else "no-store",
+            "Content-Type": "image/jpeg",
+        },
+    )
 
 
 @MediaBp.route("/events/<id>/preview.gif")
