@@ -1,22 +1,16 @@
 import logging
-from enum import Enum
 
 from fastapi import FastAPI
 
 from frigate.api import app as main_app
 from frigate.api import media, preview
+from frigate.api.defs.tags import Tags
 from frigate.plus import PlusApi
 from frigate.ptz.onvif import OnvifController
 from frigate.stats.emitter import StatsEmitter
 from frigate.storage import StorageMaintainer
 
 logger = logging.getLogger(__name__)
-
-
-class Tags(Enum):
-    preview = "Preview"
-    logs = "Logs"
-    media = "Media"
 
 
 # https://fastapi.tiangolo.com/tutorial/metadata/#use-your-tags

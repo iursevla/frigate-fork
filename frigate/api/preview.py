@@ -8,13 +8,14 @@ import pytz
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from frigate.api.defs.tags import Tags
 from frigate.const import CACHE_DIR, PREVIEW_FRAME_TYPE
 from frigate.models import Previews
 
 logger = logging.getLogger(__name__)
 
 
-router = APIRouter(tags=["Preview"])
+router = APIRouter(tags=[Tags.preview])
 
 
 @router.get("/preview/{camera_name}/start/{start_ts}/end/{end_ts}")

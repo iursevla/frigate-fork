@@ -20,6 +20,7 @@ from peewee import DoesNotExist, fn
 from tzlocal import get_localzone_name
 from werkzeug.utils import secure_filename
 
+from frigate.api.defs.tags import Tags
 from frigate.const import (
     CACHE_DIR,
     CLIPS_DIR,
@@ -34,7 +35,7 @@ from frigate.util.image import get_image_from_recording
 logger = logging.getLogger(__name__)
 
 
-router = APIRouter(tags=["Media"])
+router = APIRouter(tags=[Tags.media])
 
 
 @router.get("/media/camera/{camera_name}")
