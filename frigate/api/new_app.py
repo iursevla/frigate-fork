@@ -1,4 +1,5 @@
 import logging
+from enum import Enum
 
 from fastapi import FastAPI
 
@@ -11,18 +12,25 @@ from frigate.storage import StorageMaintainer
 
 logger = logging.getLogger(__name__)
 
+
+class Tags(Enum):
+    preview = "Preview"
+    logs = "Logs"
+    media = "Media"
+
+
 # https://fastapi.tiangolo.com/tutorial/metadata/#use-your-tags
 tags_metadata = [
     {
-        "name": "Preview",
+        "name": Tags.preview,
         "description": "Preview routes",
     },
     {
-        "name": "Logs",
+        "name": Tags.logs,
         "description": "Logs routes",
     },
     {
-        "name": "Media",
+        "name": Tags.media,
         "description": "Media routes",
     },
 ]
