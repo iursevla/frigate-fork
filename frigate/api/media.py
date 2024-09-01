@@ -16,7 +16,6 @@ import numpy as np
 import pytz
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from flask import Blueprint, jsonify, make_response
 from peewee import DoesNotExist, fn
 from tzlocal import get_localzone_name
 from werkzeug.utils import secure_filename
@@ -34,7 +33,6 @@ from frigate.util.image import get_image_from_recording
 
 logger = logging.getLogger(__name__)
 
-MediaBp = Blueprint("media", __name__)
 
 router = APIRouter(tags=["Media"])
 
@@ -328,7 +326,7 @@ def get_recordings_storage_usage(request: Request):
     ][RECORD_DIR]
 
     if not recording_stats:
-        return jsonify({})
+        return JSONResponse({})
 
     total_mb = recording_stats["total"]
 
@@ -1503,16 +1501,16 @@ def review_preview(
         return preview_mp4(review.camera, start_ts, end_ts)
 
 
-@MediaBp.route("/preview/<file_name>/thumbnail.jpg")
-@MediaBp.route("/preview/<file_name>/thumbnail.webp")
+@router.get("/preview/{file_name}/thumbnail.jpg")
+@router.get("/preview/{file_name}/thumbnail.webp")
 def preview_thumbnail(file_name: str):
     """Get a thumbnail from the cached preview frames."""
     if len(file_name) > 1000:
-        return make_response(
-            jsonify(
+        return JSONResponse(
+            content=(
                 {"success": False, "message": "Filename exceeded max length of 1000"}
             ),
-            403,
+            status_code=403,
         )
 
     safe_file_name_current = secure_filename(file_name)
@@ -1524,11 +1522,17 @@ def preview_thumbnail(file_name: str):
         ) as image_file:
             jpg_bytes = image_file.read()
     except FileNotFoundError:
-        return make_response(
-            jsonify({"success": False, "message": "Image file not found"}), 404
+        return JSONResponse(
+            content=({"success": False, "message": "Image file not found"}),
+            status_code=404,
         )
 
-    response = make_response(jpg_bytes)
-    response.headers["Content-Type"] = "image/webp"
-    response.headers["Cache-Control"] = "private, max-age=31536000"
-    return response
+    return StreamingResponse(
+        io.BytesIO(jpg_bytes),
+        # FIXME: Shouldn't it be either jpg or webp depending on the endpoint?
+        media_type="image/webp",
+        headers={
+            "Content-Type": "image/webp",
+            "Cache-Control": "private, max-age=31536000",
+        },
+    )
