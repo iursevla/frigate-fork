@@ -1305,20 +1305,26 @@ def preview_gif(
     )
 
 
-@MediaBp.route("/<camera_name>/start/<int:start_ts>/end/<int:end_ts>/preview.mp4")
-@MediaBp.route("/<camera_name>/start/<float:start_ts>/end/<float:end_ts>/preview.mp4")
-def preview_mp4(camera_name: str, start_ts, end_ts, max_cache_age=604800):
+@router.get("/{camera_name}/start/{start_ts}/end/{end_ts}/preview.mp4")
+def preview_mp4(
+    camera_name: str,
+    start_ts: float,
+    end_ts: float,
+    max_cache_age: int = Query(
+        604800, description="Max cache age in seconds. Default 7 days in seconds."
+    )
+):
     file_name = f"preview_{camera_name}_{start_ts}-{end_ts}.mp4"
 
     if len(file_name) > 1000:
-        return make_response(
-            jsonify(
+        return JSONResponse(
+            content=(
                 {
                     "success": False,
                     "message": "Filename exceeded max length of 1000 characters.",
                 }
             ),
-            403,
+            status_code=403,
         )
 
     file_name = secure_filename(file_name)
@@ -1348,8 +1354,8 @@ def preview_mp4(camera_name: str, start_ts, end_ts, max_cache_age=604800):
             preview = None
 
         if not preview:
-            return make_response(
-                jsonify({"success": False, "message": "Preview not found"}), 404
+            return JSONResponse(
+                content={"success": False, "message": "Preview not found"}, status_code=404
             )
 
         diff = start_ts - preview.start_time
@@ -1385,9 +1391,9 @@ def preview_mp4(camera_name: str, start_ts, end_ts, max_cache_age=604800):
 
         if process.returncode != 0:
             logger.error(process.stderr)
-            return make_response(
-                jsonify({"success": False, "message": "Unable to create preview gif"}),
-                500,
+            return JSONResponse(
+                content={"success": False, "message": "Unable to create preview gif"},
+                status_code=500,
             )
 
     else:
@@ -1412,8 +1418,8 @@ def preview_mp4(camera_name: str, start_ts, end_ts, max_cache_age=604800):
             selected_previews.append("duration 0.12")
 
         if not selected_previews:
-            return make_response(
-                jsonify({"success": False, "message": "Preview not found"}), 404
+            return JSONResponse(
+                content={"success": False, "message": "Preview not found"}, status_code=404
             )
 
         last_file = selected_previews[-2]
@@ -1448,20 +1454,26 @@ def preview_mp4(camera_name: str, start_ts, end_ts, max_cache_age=604800):
 
         if process.returncode != 0:
             logger.error(process.stderr)
-            return make_response(
-                jsonify({"success": False, "message": "Unable to create preview gif"}),
-                500,
+            return JSONResponse(
+                content={"success": False, "message": "Unable to create preview gif"},
+                status_code=500,
             )
 
-    response = make_response()
-    response.headers["Content-Description"] = "File Transfer"
-    response.headers["Cache-Control"] = f"private, max-age={max_cache_age}"
-    response.headers["Content-Type"] = "video/mp4"
-    response.headers["Content-Length"] = os.path.getsize(path)
-    response.headers["X-Accel-Redirect"] = (
-        f"/cache/{file_name}"  # nginx: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ignore_headers
+    headers = {
+        "Content-Description": "File Transfer",
+        "Cache-Control":  f"private, max-age={max_cache_age}",
+        "Content-Type": "video/mp4",
+        "Content-Length": str(os.path.getsize(path)),
+        # nginx: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ignore_headers
+        "X-Accel-Redirect": f"/cache/{file_name}",
+    }
+
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        filename=file_name,
+        headers=headers,
     )
-    return response
 
 
 @MediaBp.route("/review/<id>/preview")
