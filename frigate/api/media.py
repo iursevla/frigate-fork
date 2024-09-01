@@ -737,8 +737,8 @@ def label_thumbnail(request: Request, camera_name: str, label: str):
         )
 
 
-@MediaBp.route("/camera/<camera_name>/<label>/clip.mp4")
-def label_clip(camera_name, label):
+@router.get("/camera/{camera_name}/{label}/clip.mp4")
+def label_clip(camera_name: str, label: str):
     label = unquote(label)
     event_query = Event.select(fn.MAX(Event.id)).where(
         Event.camera == camera_name, Event.has_clip == True
@@ -749,10 +749,10 @@ def label_clip(camera_name, label):
     try:
         event = event_query.get()
 
-        return event_clip(event)
+        return event_clip(event.id)
     except DoesNotExist:
-        return make_response(
-            jsonify({"success": False, "message": "Event not found"}), 404
+        return JSONResponse(
+            content={"success": False, "message": "Event not found"}, status_code=404
         )
 
 
