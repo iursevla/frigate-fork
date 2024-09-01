@@ -16,7 +16,7 @@ import numpy as np
 import pytz
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from flask import Blueprint, jsonify, make_response, request
+from flask import Blueprint, jsonify, make_response
 from peewee import DoesNotExist, fn
 from tzlocal import get_localzone_name
 from werkzeug.utils import secure_filename
@@ -1312,7 +1312,7 @@ def preview_mp4(
     end_ts: float,
     max_cache_age: int = Query(
         604800, description="Max cache age in seconds. Default 7 days in seconds."
-    )
+    ),
 ):
     file_name = f"preview_{camera_name}_{start_ts}-{end_ts}.mp4"
 
@@ -1355,7 +1355,8 @@ def preview_mp4(
 
         if not preview:
             return JSONResponse(
-                content={"success": False, "message": "Preview not found"}, status_code=404
+                content={"success": False, "message": "Preview not found"},
+                status_code=404,
             )
 
         diff = start_ts - preview.start_time
@@ -1419,7 +1420,8 @@ def preview_mp4(
 
         if not selected_previews:
             return JSONResponse(
-                content={"success": False, "message": "Preview not found"}, status_code=404
+                content={"success": False, "message": "Preview not found"},
+                status_code=404,
             )
 
         last_file = selected_previews[-2]
@@ -1461,7 +1463,7 @@ def preview_mp4(
 
     headers = {
         "Content-Description": "File Transfer",
-        "Cache-Control":  f"private, max-age={max_cache_age}",
+        "Cache-Control": f"private, max-age={max_cache_age}",
         "Content-Type": "video/mp4",
         "Content-Length": str(os.path.getsize(path)),
         # nginx: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ignore_headers
@@ -1476,15 +1478,17 @@ def preview_mp4(
     )
 
 
-@MediaBp.route("/review/<id>/preview")
-def review_preview(id: str):
-    format = request.args.get("format", default="gif")
-
+@router.get("/review/{event_id}/preview")
+def review_preview(
+    event_id: str,
+    format: str = Query(default="gif", enum=["gif", "mp4"]),
+):
     try:
-        review: ReviewSegment = ReviewSegment.get(ReviewSegment.id == id)
+        review: ReviewSegment = ReviewSegment.get(ReviewSegment.id == event_id)
     except DoesNotExist:
-        return make_response(
-            jsonify({"success": False, "message": "Review segment not found"}), 404
+        return JSONResponse(
+            content=({"success": False, "message": "Review segment not found"}),
+            status_code=404,
         )
 
     padding = 8
