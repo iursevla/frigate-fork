@@ -772,9 +772,9 @@ def grid_snapshot(
             request.app.detected_frames_processor.get_current_frame_time(camera_name)
             + retry_interval
         ):
-            return make_response(
-                jsonify({"success": False, "message": "Unable to get valid frame"}),
-                500,
+            return JSONResponse(
+                content={"success": False, "message": "Unable to get valid frame"},
+                status_code=500,
             )
 
         try:
@@ -785,9 +785,9 @@ def grid_snapshot(
                 .grid
             )
         except DoesNotExist:
-            return make_response(
-                jsonify({"success": False, "message": "Unable to get region grid"}),
-                500,
+            return JSONResponse(
+                content={"success": False, "message": "Unable to get region grid"},
+                status_code=500,
             )
 
         color_arg = color.lower()
@@ -801,7 +801,7 @@ def grid_snapshot(
         elif color_arg == "white":
             draw_color = (255, 255, 255)
         else:
-            draw_color = (0, 255, 0) # green
+            draw_color = (0, 255, 0)  # green
 
         grid_size = len(grid)
         grid_coef = 1.0 / grid_size
@@ -877,46 +877,45 @@ def grid_snapshot(
         )
 
 
-@MediaBp.route("/events/<id>/snapshot-clean.png")
-def event_snapshot_clean(id):
-    download = request.args.get("download", type=bool)
+@router.get("/events/{event_id}/snapshot-clean.png")
+def event_snapshot_clean(request: Request, event_id: str, download: bool = False):
     png_bytes = None
     try:
-        event = Event.get(Event.id == id)
-        snapshot_config = current_app.frigate_config.cameras[event.camera].snapshots
+        event = Event.get(Event.id == event_id)
+        snapshot_config = request.app.frigate_config.cameras[event.camera].snapshots
         if not (snapshot_config.enabled and event.has_snapshot):
-            return make_response(
-                jsonify(
-                    {
-                        "success": False,
-                        "message": "Snapshots and clean_copy must be enabled in the config",
-                    }
-                ),
-                404,
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "Snapshots and clean_copy must be enabled in the config",
+                },
+                status_code=404,
             )
         if event.end_time is None:
             # see if the object is currently being tracked
             try:
                 camera_states = (
-                    current_app.detected_frames_processor.camera_states.values()
+                    request.app.detected_frames_processor.camera_states.values()
                 )
                 for camera_state in camera_states:
-                    if id in camera_state.tracked_objects:
-                        tracked_obj = camera_state.tracked_objects.get(id)
+                    if event_id in camera_state.tracked_objects:
+                        tracked_obj = camera_state.tracked_objects.get(event_id)
                         if tracked_obj is not None:
                             png_bytes = tracked_obj.get_clean_png()
                             break
             except Exception:
-                return make_response(
-                    jsonify({"success": False, "message": "Event not found"}), 404
+                return JSONResponse(
+                    content={"success": False, "message": "Event not found"},
+                    status_code=404,
                 )
         elif not event.has_snapshot:
-            return make_response(
-                jsonify({"success": False, "message": "Snapshot not available"}), 404
+            return JSONResponse(
+                content={"success": False, "message": "Snapshot not available"},
+                status_code=404,
             )
     except DoesNotExist:
-        return make_response(
-            jsonify({"success": False, "message": "Event not found"}), 404
+        return JSONResponse(
+            content={"success": False, "message": "Event not found"}, status_code=404
         )
     if png_bytes is None:
         try:
@@ -924,11 +923,12 @@ def event_snapshot_clean(id):
                 CLIPS_DIR, f"{event.camera}-{event.id}-clean.png"
             )
             if not os.path.exists(clean_snapshot_path):
-                return make_response(
-                    jsonify(
-                        {"success": False, "message": "Clean snapshot not available"}
-                    ),
-                    404,
+                return JSONResponse(
+                    content={
+                        "success": False,
+                        "message": "Clean snapshot not available",
+                    },
+                    status_code=404,
                 )
             with open(
                 os.path.join(CLIPS_DIR, f"{event.camera}-{event.id}-clean.png"), "rb"
@@ -936,20 +936,29 @@ def event_snapshot_clean(id):
                 png_bytes = image_file.read()
         except Exception:
             logger.error(f"Unable to load clean png for event: {event.id}")
-            return make_response(
-                jsonify(
-                    {"success": False, "message": "Unable to load clean png for event"}
-                ),
-                400,
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": "Unable to load clean png for event",
+                },
+                status_code=400,
             )
-    response = make_response(png_bytes)
-    response.headers["Content-Type"] = "image/png"
-    response.headers["Cache-Control"] = "private, max-age=31536000"
+
+    headers = {
+        "Content-Type": "image/png",
+        "Cache-Control": "private, max-age=31536000",
+    }
+
     if download:
-        response.headers["Content-Disposition"] = (
-            f"attachment; filename=snapshot-{id}-clean.png"
+        headers["Content-Disposition"] = (
+            f"attachment; filename=snapshot-{event_id}-clean.png"
         )
-    return response
+
+    return StreamingResponse(
+        io.BytesIO(png_bytes),
+        media_type="image/jpeg",
+        headers=headers,
+    )
 
 
 @router.get("/events/{event_id}/snapshot.jpg")
