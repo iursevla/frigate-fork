@@ -757,6 +757,8 @@ class FrigateApp:
                 self.fastapi_app,
                 host="127.0.0.1",
                 port=5001,
+                access_log=False,
+                log_level="trace",
             )
         except KeyboardInterrupt:
             pass
