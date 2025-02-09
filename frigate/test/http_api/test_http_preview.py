@@ -67,34 +67,22 @@ class TestHttpPReview(BaseTestHttp):
         now = int(datetime.now().timestamp())
 
         with TestClient(self.app) as client:
-            # between now - 500 <-> now
-            id1 = "1.random"
-            super().insert_mock_preview(
-                id1, now - 500, now, f"/media/frigate/dir/{id1}"
-            )
-            # between now <-> now + 500
-            id2 = "2.random"
-            super().insert_mock_preview(
-                id2, now, now + 500, f"/media/frigate/dir/{id2}"
-            )
-            # between now - 1000 <-> now <-> now + 1000
-            id3 = "3.random"
-            super().insert_mock_preview(
-                id3, now - 1000, now + 1000, f"/media/frigate/dir/{id3}"
-            )
-            # between now + 1 <-> now + 500 (should not be found in the response)
-            id4 = "4.random"
-            super().insert_mock_preview(
-                id4, now + 1, now + 500, f"/media/frigate/dir/{id4}"
-            )
-            # between now - 500 <-> now - 1 (should not be found in the response)
-            id5 = "5.random"
-            super().insert_mock_preview(
-                id5, now + 1, now + 500, f"/media/frigate/dir/{id5}"
-            )
+            previews_to_insert = [
+                [now - 500, now],  # id_0
+                [now, now + 500],  # id_1
+                [now - 500, now - 2],  # id_2 (outside range)
+                [now + 2, now + 500][  # id_3 (outside range)
+                    now - 1000, now + 1000
+                ],  # id_4
+            ]
+            for index, (start_ts, end_ts) in enumerate(previews_to_insert):
+                id = f"id_{index}"
+                self.insert_mock_preview(
+                    id, start_ts, end_ts, f"/media/frigate/dir/{id}.random"
+                )
 
-            start_ts = now
-            end_ts = now
+            start_ts = now - 1
+            end_ts = now + 1
             camera_name = "front_door"
             response = client.get(
                 f"/preview/{camera_name}/start/{start_ts}/end/{end_ts}"
@@ -103,9 +91,8 @@ class TestHttpPReview(BaseTestHttp):
             response_json = response.json()
             assert len(response_json) == 3
 
-            # id3 comes first since it has the smallest start_time
-            # There's actually no guarantee that id1 and id2 come in any order
-            expected_event_order = [f"/dir/{id3}", f"/dir/{id1}", f"/dir/{id2}"]
+            # id_4 comes first since it has the smallest start_time
+            expected_event_order = ["/dir/id_4", "/dir/id_0", "/dir/id_1"]
             actual_event_order = [obj["src"] for obj in response_json]
             self.assertEqual(actual_event_order, expected_event_order)
 
