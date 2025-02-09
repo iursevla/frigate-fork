@@ -3,11 +3,14 @@
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+from typing import Union
 
 import pytz
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from frigate.api.defs.response.generic_response import GenericResponse
+from frigate.api.defs.response.preview_response import PreviewResponse
 from frigate.api.defs.tags import Tags
 from frigate.const import CACHE_DIR, PREVIEW_FRAME_TYPE
 from frigate.models import Previews
@@ -18,7 +21,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=[Tags.preview])
 
 
-@router.get("/preview/{camera_name}/start/{start_ts}/end/{end_ts}")
+@router.get(
+    "/preview/{camera_name}/start/{start_ts}/end/{end_ts}",
+    response_model=Union[list[PreviewResponse], GenericResponse],
+)
 def preview_ts(camera_name: str, start_ts: float, end_ts: float):
     """Get all mp4 previews relevant for time period."""
     if camera_name != "all":
@@ -71,7 +77,10 @@ def preview_ts(camera_name: str, start_ts: float, end_ts: float):
     return JSONResponse(content=clips, status_code=200)
 
 
-@router.get("/preview/{year_month}/{day}/{hour}/{camera_name}/{tz_name}")
+@router.get(
+    "/preview/{year_month}/{day}/{hour}/{camera_name}/{tz_name}",
+    response_model=Union[list[PreviewResponse], GenericResponse],
+)
 def preview_hour(year_month: str, day: int, hour: int, camera_name: str, tz_name: str):
     """Get all mp4 previews relevant for time period given the timezone"""
     parts = year_month.split("-")

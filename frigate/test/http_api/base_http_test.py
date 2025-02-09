@@ -10,7 +10,7 @@ from pydantic import Json
 
 from frigate.api.fastapi_app import create_fastapi_app
 from frigate.config import FrigateConfig
-from frigate.models import Event, Recordings, ReviewSegment
+from frigate.models import Event, Previews, Recordings, ReviewSegment
 from frigate.review.types import SeverityEnum
 from frigate.test.const import TEST_DB, TEST_DB_CLEANUPS
 
@@ -188,4 +188,21 @@ class BaseTestHttp(unittest.TestCase):
             end_time=end_time,
             duration=end_time - start_time,
             motion=motion,
+        ).execute()
+
+    def insert_mock_preview(
+        self,
+        id: str,
+        start_time: float = datetime.datetime.now().timestamp(),
+        end_time: float = datetime.datetime.now().timestamp() + 20,
+        path: str = None,
+    ) -> Event:
+        """Inserts a Preview model with a given id."""
+        return Previews.insert(
+            id=id,
+            camera="front_door",
+            path=path if path is not None else id,
+            start_time=start_time,
+            end_time=end_time,
+            duration=end_time - start_time,
         ).execute()
