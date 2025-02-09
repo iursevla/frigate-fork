@@ -71,14 +71,13 @@ class TestHttpPReview(BaseTestHttp):
                 [now - 500, now],  # id_0
                 [now, now + 500],  # id_1
                 [now - 500, now - 2],  # id_2 (outside range)
-                [now + 2, now + 500][  # id_3 (outside range)
-                    now - 1000, now + 1000
-                ],  # id_4
+                [now + 2, now + 500],  # id_3 (outside range)
+                [now - 1000, now + 1000],  # id_4
             ]
             for index, (start_ts, end_ts) in enumerate(previews_to_insert):
                 id = f"id_{index}"
                 self.insert_mock_preview(
-                    id, start_ts, end_ts, f"/media/frigate/dir/{id}.random"
+                    id, start_ts, end_ts, f"/media/frigate/dir/{id}"
                 )
 
             start_ts = now - 1
