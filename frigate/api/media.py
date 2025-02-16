@@ -25,6 +25,7 @@ from frigate.api.defs.query.media_query_parameters import (
     MediaEventsSnapshotQueryParams,
     MediaLatestFrameQueryParams,
     MediaMjpegFeedQueryParams,
+    MediaRecordingsSummaryQueryParams,
 )
 from frigate.api.defs.tags import Tags
 from frigate.config import FrigateConfig
@@ -370,6 +371,48 @@ def get_recordings_storage_usage(request: Request):
             ) * 100
 
     return JSONResponse(content=camera_usages)
+
+
+@router.get("/recordings/summary")
+def all_recordings_summary(params: MediaRecordingsSummaryQueryParams = Depends()):
+    """Returns true/false by day indicating if recordings exist"""
+    hour_modifier, minute_modifier, seconds_offset = get_tz_modifiers(params.timezone)
+
+    cameras = params.cameras
+
+    query = (
+        Recordings.select(
+            fn.strftime(
+                "%Y-%m-%d",
+                fn.datetime(
+                    Recordings.start_time + seconds_offset,
+                    "unixepoch",
+                    hour_modifier,
+                    minute_modifier,
+                ),
+            ).alias("day")
+        )
+        .group_by(
+            fn.strftime(
+                "%Y-%m-%d",
+                fn.datetime(
+                    Recordings.start_time + seconds_offset,
+                    "unixepoch",
+                    hour_modifier,
+                    minute_modifier,
+                ),
+            )
+        )
+        .order_by(Recordings.start_time.desc())
+    )
+
+    if cameras != "all":
+        query = query.where(Recordings.camera << cameras.split(","))
+
+    recording_days = query.namedtuples()
+    days = {day.day: True for day in recording_days}
+
+    return JSONResponse(content=days)
 
 
 @router.get("/{camera_name}/recordings/summary")
@@ -1045,30 +1088,8 @@ def event_clip(request: Request, event_id: str):
             content={"success": False, "message": "Clip not available"}, status_code=404
         )
 
-    file_name = f"{event.camera}-{event.id}.mp4"
-    clip_path = os.path.join(CLIPS_DIR, file_name)
-
-    if not os.path.isfile(clip_path):
-        end_ts = (
-            datetime.now().timestamp() if event.end_time is None else event.end_time
-        )
-        return recording_clip(request, event.camera, event.start_time, end_ts)
-
-    headers = {
-        "Content-Description": "File Transfer",
-        "Cache-Control": "no-cache",
-        "Content-Type": "video/mp4",
-        "Content-Length": str(os.path.getsize(clip_path)),
-        # nginx: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ignore_headers
-        "X-Accel-Redirect": f"/clips/{file_name}",
-    }
-
-    return FileResponse(
-        clip_path,
-        media_type="video/mp4",
-        filename=file_name,
-        headers=headers,
-    )
+    end_ts = datetime.now().timestamp() if event.end_time is None else event.end_time
+    return recording_clip(request, event.camera, event.start_time, end_ts)
 
 
 @router.get("/events/{event_id}/preview.gif")

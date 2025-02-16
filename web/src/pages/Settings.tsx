@@ -37,6 +37,8 @@ import AuthenticationView from "@/views/settings/AuthenticationView";
 import NotificationView from "@/views/settings/NotificationsSettingsView";
 import SearchSettingsView from "@/views/settings/SearchSettingsView";
 import UiSettingsView from "@/views/settings/UiSettingsView";
+import { useSearchEffect } from "@/hooks/use-overlay-state";
+import { useSearchParams } from "react-router-dom";
 
 const allSettingsViews = [
   "UI settings",
@@ -56,6 +58,8 @@ export default function Settings() {
   const tabsRef = useRef<HTMLDivElement | null>(null);
 
   const { data: config } = useSWR<FrigateConfig>("config");
+
+  const [searchParams] = useSearchParams();
 
   // available settings views
 
@@ -118,6 +122,23 @@ export default function Settings() {
       }
     }
   }, [tabsRef, pageToggle]);
+
+  useSearchEffect("page", (page: string) => {
+    if (allSettingsViews.includes(page as SettingsType)) {
+      setPage(page as SettingsType);
+    }
+    // don't clear url params if we're creating a new object mask
+    return !searchParams.has("object_mask");
+  });
+
+  useSearchEffect("camera", (camera: string) => {
+    const cameraNames = cameras.map((c) => c.name);
+    if (cameraNames.includes(camera)) {
+      setSelectedCamera(camera);
+    }
+    // don't clear url params if we're creating a new object mask
+    return !searchParams.has("object_mask");
+  });
 
   useEffect(() => {
     document.title = "Settings - Frigate";
