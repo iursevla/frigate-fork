@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Union
 
 import pytz
-from fastapi import APIRouter
+from fastapi import APIRouter, Path
 from fastapi.responses import JSONResponse
 
 from frigate.api.defs.response.generic_response import GenericResponse
@@ -81,7 +81,16 @@ def preview_ts(camera_name: str, start_ts: float, end_ts: float):
     "/preview/{year_month}/{day}/{hour}/{camera_name}/{tz_name}",
     response_model=Union[list[PreviewResponse], GenericResponse],
 )
-def preview_hour(year_month: str, day: int, hour: int, camera_name: str, tz_name: str):
+def preview_hour(
+    year_month: str = Path(..., description="Year and month in YYYY-MM format"),
+    day: int = Path(..., description="Day of the month (1-31)", ge=1, le=31),
+    hour: int = Path(..., description="Hour of the day (0-23)", ge=0, le=23),
+    camera_name: str = Path(..., description="Name of the camera"),
+    tz_name: str = Path(
+        ...,
+        description="Time zone abbreviation (e.g., UTC, PST, EST) or identifier (comma separated - Asia,Shanghai instead of Asia/Shanghai)",
+    ),
+):
     """Get all mp4 previews relevant for time period given the timezone"""
     parts = year_month.split("-")
     start_date = (

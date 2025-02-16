@@ -1,7 +1,9 @@
-import datetime
+from __future__ import annotations
+
 import logging
 import os
 import unittest
+from datetime import datetime
 
 from peewee_migrate import Router
 from playhouse.sqlite_ext import SqliteExtDatabase
@@ -124,8 +126,8 @@ class BaseTestHttp(unittest.TestCase):
     def insert_mock_event(
         self,
         id: str,
-        start_time: float = datetime.datetime.now().timestamp(),
-        end_time: float = datetime.datetime.now().timestamp() + 20,
+        start_time: float = datetime.now().timestamp(),
+        end_time: float = datetime.now().timestamp() + 20,
         has_clip: bool = True,
         top_score: int = 100,
         score: int = 0,
@@ -154,8 +156,8 @@ class BaseTestHttp(unittest.TestCase):
     def insert_mock_review_segment(
         self,
         id: str,
-        start_time: float = datetime.datetime.now().timestamp(),
-        end_time: float = datetime.datetime.now().timestamp() + 20,
+        start_time: float = datetime.now().timestamp(),
+        end_time: float = datetime.now().timestamp() + 20,
         severity: SeverityEnum = SeverityEnum.alert,
         has_been_reviewed: bool = False,
         data: Json = {},
@@ -175,8 +177,8 @@ class BaseTestHttp(unittest.TestCase):
     def insert_mock_recording(
         self,
         id: str,
-        start_time: float = datetime.datetime.now().timestamp(),
-        end_time: float = datetime.datetime.now().timestamp() + 20,
+        start_time: float = datetime.now().timestamp(),
+        end_time: float = datetime.now().timestamp() + 20,
         motion: int = 0,
     ) -> Event:
         """Inserts a recording model with a given id."""
@@ -193,16 +195,21 @@ class BaseTestHttp(unittest.TestCase):
     def insert_mock_preview(
         self,
         id: str,
-        start_time: float = datetime.datetime.now().timestamp(),
-        end_time: float = datetime.datetime.now().timestamp() + 20,
+        start_time: datetime | float = datetime.now().timestamp(),
+        end_time: datetime | float = datetime.now().timestamp() + 20,
         path: str = None,
     ) -> Event:
         """Inserts a Preview model with a given id."""
+        duration = 0
+        if isinstance(start_time, datetime) and isinstance(start_time, datetime):
+            duration = (end_time - start_time).total_seconds()
+        else:
+            duration = end_time - start_time
         return Previews.insert(
             id=id,
             camera="front_door",
             path=path if path is not None else id,
             start_time=start_time,
             end_time=end_time,
-            duration=end_time - start_time,
+            duration=duration,
         ).execute()

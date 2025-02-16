@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import pytz
 from fastapi.testclient import TestClient
 
 from frigate.models import Previews
@@ -17,7 +18,7 @@ class TestHttpPReview(BaseTestHttp):
     ####################################################################################################################
     #######################  GET /preview/{camera_name}/start/{start_ts}/end/{end_ts} Endpoint   #######################
     ####################################################################################################################
-    def test_get_preview_within_ts_no_matches(self):
+    def test_get_previews_time_period_no_matches(self):
         now = int(datetime.now().timestamp())
 
         with TestClient(self.app) as client:
@@ -37,7 +38,7 @@ class TestHttpPReview(BaseTestHttp):
                 response_json,
             )
 
-    def test_get_preview_within_ts_with_matches(self):
+    def test_get_previews_time_period_with_matches(self):
         now = int(datetime.now().timestamp())
 
         with TestClient(self.app) as client:
@@ -63,7 +64,7 @@ class TestHttpPReview(BaseTestHttp):
             }
             self.assertEqual(response_json[0], expected_response)
 
-    def test_get_preview_within_ts_with_multiple_matches(self):
+    def test_get_previews_time_period_multiple_matches(self):
         now = int(datetime.now().timestamp())
 
         with TestClient(self.app) as client:
@@ -98,6 +99,52 @@ class TestHttpPReview(BaseTestHttp):
     ####################################################################################################################
     ####################  GET /preview/{year_month}/{day}/{hour}/{camera_name}/{tz_name} Endpoint   ####################
     ####################################################################################################################
+    def test_get_previews_hour_with_timezone_no_matches(self):
+        with TestClient(self.app) as client:
+            start_time = datetime(2025, 2, 1, 0, 0, 0, tzinfo=pytz.utc).timestamp()
+            time_end = datetime(2025, 2, 1, 6, 59, 59, tzinfo=pytz.utc).timestamp()
+            super().insert_mock_preview(
+                "123456.random", start_time, time_end, f"/media/frigate/dir/{id}"
+            )
+
+            year_month = "2025-02"
+            day = 1
+            hour = 0
+            tz_name = "America,Phoenix"
+            camera_name = "front_door"
+            # Looks for Previews at 01 February 2025 00:00:00 America/Phoenix timezone
+            # This means it will look for Previews starting at 01 February 2025 07:00:00 UTC
+            response = client.get(
+                f"/preview/{year_month}/{day}/{hour}/{camera_name}/{tz_name}"
+            )
+            assert response.status_code == 404
+            response_json = response.json()
+            self.assertDictEqual(
+                {"success": False, "message": "No previews found."},
+                response_json,
+            )
+
+    def test_get_previews_hour_with_timezone_matches(self):
+        with TestClient(self.app) as client:
+            start_time = datetime(2025, 2, 1, 0, 0, 0, tzinfo=pytz.utc).timestamp()
+            time_end = datetime(2025, 2, 1, 9, 0, 0, tzinfo=pytz.utc).timestamp()
+            super().insert_mock_preview(
+                "123456.random", start_time, time_end, f"/media/frigate/dir/{id}"
+            )
+
+            year_month = "2025-02"
+            day = 1
+            hour = 0
+            tz_name = "America,Phoenix"
+            camera_name = "front_door"
+            # Looks for Previews at 01 February 2025 00:00:00 America/Phoenix timezone
+            # This means it will look for Previews starting at 01 February 2025 07:00:00 UTC
+            response = client.get(
+                f"/preview/{year_month}/{day}/{hour}/{camera_name}/{tz_name}"
+            )
+            assert response.status_code == 200
+            response_json = response.json()
+            assert len(response_json) == 1
 
     ####################################################################################################################
     ####################  GET /preview/{camera_name}/start/{start_ts}/end/{end_ts}/frames Endpoint   ###################
