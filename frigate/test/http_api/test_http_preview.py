@@ -9,7 +9,7 @@ from frigate.models import Previews
 from frigate.test.http_api.base_http_test import BaseTestHttp
 
 
-class TestHttpPReview(BaseTestHttp):
+class TestHttpPreview(BaseTestHttp):
     def setUp(self):
         super().setUp([Previews])
         self.app = super().create_app()

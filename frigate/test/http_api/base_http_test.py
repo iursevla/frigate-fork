@@ -112,14 +112,14 @@ class BaseTestHttp(unittest.TestCase):
         except OSError:
             pass
 
-    def create_app(self, stats=None):
+    def create_app(self, stats=None, onvif=None):
         return create_fastapi_app(
             FrigateConfig(**self.minimal_config),
             self.db,
             None,
             None,
             None,
-            None,
+            onvif,
             stats,
             None,
         )

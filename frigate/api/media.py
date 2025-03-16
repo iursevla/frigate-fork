@@ -7,6 +7,7 @@ import subprocess as sp
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path as FilePath
+from typing import Union
 from urllib.parse import unquote
 
 import cv2
@@ -26,6 +27,8 @@ from frigate.api.defs.query.media_query_parameters import (
     MediaMjpegFeedQueryParams,
     MediaRecordingsSummaryQueryParams,
 )
+from frigate.api.defs.response.generic_response import GenericResponse
+from frigate.api.defs.response.media.media_ptz_info_response import MediaPtzInfoResponse
 from frigate.api.defs.tags import Tags
 from frigate.camera.state import CameraState
 from frigate.config import FrigateConfig
@@ -106,7 +109,10 @@ def imagestream(
         )
 
 
-@router.get("/{camera_name}/ptz/info")
+@router.get(
+    "/{camera_name}/ptz/info",
+    response_model=Union[MediaPtzInfoResponse, GenericResponse],
+)
 async def camera_ptz_info(request: Request, camera_name: str):
     if camera_name in request.app.frigate_config.cameras:
         return JSONResponse(

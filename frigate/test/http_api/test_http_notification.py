@@ -4,7 +4,7 @@ from frigate.models import User
 from frigate.test.http_api.base_http_test import BaseTestHttp
 
 
-class TestHttpReview(BaseTestHttp):
+class TestHttpNotification(BaseTestHttp):
     def setUp(self):
         super().setUp([User])
         self.app = super().create_app()
