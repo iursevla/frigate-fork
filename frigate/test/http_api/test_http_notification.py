@@ -13,6 +13,31 @@ class TestHttpReview(BaseTestHttp):
         return list(User.select().where(User.username.in_(usernames)).execute())
 
     ####################################################################################################################
+    #####################################  GET /notifications/pubkey Endpoint   ########################################
+    ####################################################################################################################
+    def test_get_notifications_pubkey_notifications_disabled(self):
+        with TestClient(self.app) as client:
+            response = client.get("/notifications/pubkey")
+            assert response.status_code == 400
+            response_json = response.json()
+            self.assertDictEqual(
+                {"success": False, "message": "Notifications are not enabled."},
+                response_json,
+            )
+
+    def test_get_notifications_pubkey_success(self):
+        with TestClient(self.app) as client:
+            self.app.frigate_config.notifications.enabled = True
+            response = client.get("/notifications/pubkey")
+            assert response.status_code == 200
+            response_json = response.json()
+            self.assertIsInstance(response_json, str)
+            self.assertEqual(
+                response_json,
+                "BCt98BGdXLaUcp4FZDsjXDFL8-W_ho1A4YLI6nwE6zfLRb5ACSV8OQOhkdrs2YAm1d3uC12LlXvKro1-J_dSz6Y",
+            )
+
+    ####################################################################################################################
     #####################################  POST /notifications/register Endpoint   #####################################
     ####################################################################################################################
     def test_post_register_notifications_no_sub_provided(self):

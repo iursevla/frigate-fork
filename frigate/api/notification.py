@@ -2,6 +2,7 @@
 
 import logging
 import os
+from typing import Union
 
 from cryptography.hazmat.primitives import serialization
 from fastapi import APIRouter, Request
@@ -19,7 +20,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=[Tags.notifications])
 
 
-@router.get("/notifications/pubkey")
+@router.get(
+    "/notifications/pubkey",
+    response_model=Union[str, GenericResponse],
+)
 def get_vapid_pub_key(request: Request):
     if not request.app.frigate_config.notifications.enabled:
         return JSONResponse(
