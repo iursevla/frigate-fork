@@ -25,7 +25,11 @@ router = APIRouter(tags=[Tags.preview])
     "/preview/{camera_name}/start/{start_ts}/end/{end_ts}",
     response_model=Union[list[PreviewResponse], GenericResponse],
 )
-def preview_ts(camera_name: str, start_ts: float, end_ts: float):
+def preview_ts(
+    camera_name: str = Path(..., description="Name of the camera"),
+    start_ts: float = Path(..., description="Start timestamp"),
+    end_ts: float = Path(..., description="End timestamp"),
+):
     """Get all mp4 previews relevant for time period."""
     if camera_name != "all":
         camera_clause = Previews.camera == camera_name
@@ -104,8 +108,15 @@ def preview_hour(
     return preview_ts(camera_name, start_ts, end_ts)
 
 
-@router.get("/preview/{camera_name}/start/{start_ts}/end/{end_ts}/frames")
-def get_preview_frames_from_cache(camera_name: str, start_ts: float, end_ts: float):
+@router.get(
+    "/preview/{camera_name}/start/{start_ts}/end/{end_ts}/frames",
+    response_model=list[str],
+)
+def get_preview_frames_from_cache(
+    camera_name: str = Path(..., description="Name of the camera"),
+    start_ts: float = Path(..., description="Start timestamp"),
+    end_ts: float = Path(..., description="End timestamp"),
+):
     """Get list of cached preview frames"""
     preview_dir = os.path.join(CACHE_DIR, "preview_frames")
     file_start = f"preview_{camera_name}"

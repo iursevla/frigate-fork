@@ -1,8 +1,10 @@
 from datetime import datetime
+from unittest import mock
 
 import pytz
 from fastapi.testclient import TestClient
 
+from frigate.const import PREVIEW_FRAME_TYPE
 from frigate.models import Previews
 from frigate.test.http_api.base_http_test import BaseTestHttp
 
@@ -149,3 +151,56 @@ class TestHttpPReview(BaseTestHttp):
     ####################################################################################################################
     ####################  GET /preview/{camera_name}/start/{start_ts}/end/{end_ts}/frames Endpoint   ###################
     ####################################################################################################################
+    def test_get_preview_frames_time_period_no_matches(self):
+        now = int(datetime.now().timestamp())
+
+        with TestClient(self.app) as client:
+            with mock.patch("os.listdir") as mocked_listdir:
+                start_ts = now
+                end_ts = start_ts + 2
+
+                mocked_listdir.return_value = [
+                    f"preview_front_door-{start_ts}",
+                ]
+
+                id = "123456.random"
+                camera_name = "front_door"
+                # Insert Preview with start/end outside of the time period to search
+                super().insert_mock_preview(id, end_ts + 1, end_ts + 2)
+                response = client.get(
+                    f"/preview/{camera_name}/start/{start_ts}/end/{end_ts}/frames"
+                )
+                assert response.status_code == 200
+                response_json = response.json()
+                assert len(response_json) == 0
+
+    def test_get_preview_frames_time_period_matches(self):
+        now = int(datetime.now().timestamp())
+
+        with TestClient(self.app) as client:
+            with mock.patch("os.listdir") as mocked_listdir:
+                start_ts = now
+                end_ts = start_ts + 2
+
+                mocked_listdir.return_value = [
+                    f"preview_front_door-{start_ts}.0.{PREVIEW_FRAME_TYPE}",
+                    f"preview_front_door-{end_ts}.0.{PREVIEW_FRAME_TYPE}",
+                ]
+
+                id = "123456.random"
+                camera_name = "front_door"
+                # Insert Preview with start/end outside of the time period to search
+                super().insert_mock_preview(id, end_ts + 1, end_ts + 2)
+                response = client.get(
+                    f"/preview/{camera_name}/start/{start_ts}/end/{end_ts}/frames"
+                )
+                assert response.status_code == 200
+                response_json = response.json()
+                assert len(response_json) == 2
+                self.assertListEqual(
+                    response_json,
+                    [
+                        f"preview_front_door-{start_ts}.0.{PREVIEW_FRAME_TYPE}",
+                        f"preview_front_door-{end_ts}.0.{PREVIEW_FRAME_TYPE}",
+                    ],
+                )
