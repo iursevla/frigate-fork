@@ -23,11 +23,13 @@ def should_update_db(prev_event: Event, current_event: Event) -> bool:
         if (
             prev_event["top_score"] != current_event["top_score"]
             or prev_event["entered_zones"] != current_event["entered_zones"]
-            or prev_event["thumbnail"] != current_event["thumbnail"]
             or prev_event["end_time"] != current_event["end_time"]
             or prev_event["average_estimated_speed"]
             != current_event["average_estimated_speed"]
             or prev_event["velocity_angle"] != current_event["velocity_angle"]
+            or prev_event["recognized_license_plate"]
+            != current_event["recognized_license_plate"]
+            or prev_event["path_data"] != current_event["path_data"]
         ):
             return True
     return False
@@ -201,7 +203,7 @@ class EventProcessor(threading.Thread):
                 Event.start_time: start_time,
                 Event.end_time: end_time,
                 Event.zones: list(event_data["entered_zones"]),
-                Event.thumbnail: event_data["thumbnail"],
+                Event.thumbnail: event_data.get("thumbnail"),
                 Event.has_clip: event_data["has_clip"],
                 Event.has_snapshot: event_data["has_snapshot"],
                 Event.model_hash: first_detector.model.model_hash,
@@ -217,6 +219,7 @@ class EventProcessor(threading.Thread):
                     "velocity_angle": event_data["velocity_angle"],
                     "type": "object",
                     "max_severity": event_data.get("max_severity"),
+                    "path_data": event_data.get("path_data"),
                 },
             }
 
@@ -224,6 +227,15 @@ class EventProcessor(threading.Thread):
             if event_data.get("sub_label") is not None:
                 event[Event.sub_label] = event_data["sub_label"][0]
                 event[Event.data]["sub_label_score"] = event_data["sub_label"][1]
+
+            # only overwrite the recognized_license_plate in the database if it's set
+            if event_data.get("recognized_license_plate") is not None:
+                event[Event.data]["recognized_license_plate"] = event_data[
+                    "recognized_license_plate"
+                ][0]
+                event[Event.data]["recognized_license_plate_score"] = event_data[
+                    "recognized_license_plate"
+                ][1]
 
             (
                 Event.insert(event)
@@ -256,7 +268,7 @@ class EventProcessor(threading.Thread):
                 Event.camera: event_data["camera"],
                 Event.start_time: event_data["start_time"],
                 Event.end_time: event_data["end_time"],
-                Event.thumbnail: event_data["thumbnail"],
+                Event.thumbnail: event_data.get("thumbnail"),
                 Event.has_clip: event_data["has_clip"],
                 Event.has_snapshot: event_data["has_snapshot"],
                 Event.zones: [],

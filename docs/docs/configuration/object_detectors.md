@@ -10,25 +10,31 @@ title: Object Detectors
 Frigate supports multiple different detectors that work on different types of hardware:
 
 **Most Hardware**
+
 - [Coral EdgeTPU](#edge-tpu-detector): The Google Coral EdgeTPU is available in USB and m.2 format allowing for a wide range of compatibility with devices.
-- [Hailo](#hailo-8l): The Hailo8 AI Acceleration module is available in m.2 format with a HAT for RPi devices, offering a wide range of compatibility with devices.
+- [Hailo](#hailo-8): The Hailo8 and Hailo8L AI Acceleration module is available in m.2 format with a HAT for RPi devices, offering a wide range of compatibility with devices.
 
 **AMD**
+
 - [ROCm](#amdrocm-gpu-detector): ROCm can run on AMD Discrete GPUs to provide efficient object detection.
 - [ONNX](#onnx): ROCm will automatically be detected and used as a detector in the `-rocm` Frigate image when a supported ONNX model is configured.
 
 **Intel**
+
 - [OpenVino](#openvino-detector): OpenVino can run on Intel Arc GPUs, Intel integrated GPUs, and Intel CPUs to provide efficient object detection.
 - [ONNX](#onnx): OpenVINO will automatically be detected and used as a detector in the default Frigate image when a supported ONNX model is configured.
 
 **Nvidia**
+
 - [TensortRT](#nvidia-tensorrt-detector): TensorRT can run on Nvidia GPUs and Jetson devices, using one of many default models.
 - [ONNX](#onnx): TensorRT will automatically be detected and used as a detector in the `-tensorrt` or `-tensorrt-jp(4/5)` Frigate images when a supported ONNX model is configured.
 
 **Rockchip**
+
 - [RKNN](#rockchip-platform): RKNN models can run on Rockchip devices with included NPUs.
 
 **For Testing**
+
 - [CPU Detector (not recommended for actual use](#cpu-detector-not-recommended): Use a CPU to run tflite model, this is not recommended and in most cases OpenVINO can be used in CPU mode with better results.
 
 :::
@@ -43,7 +49,7 @@ This does not affect using hardware for accelerating other tasks such as [semant
 
 # Officially Supported Detectors
 
-Frigate provides the following builtin detector types: `cpu`, `edgetpu`, `hailo8l`, `onnx`, `openvino`, `rknn`, `rocm`, and `tensorrt`. By default, Frigate will use a single CPU detector. Other detectors may require additional configuration as described below. When using multiple detectors they will run in dedicated processes, but pull from a common queue of detection requests from across all cameras.
+Frigate provides the following builtin detector types: `cpu`, `edgetpu`, `hailo8l`, `onnx`, `openvino`, `rknn`, and `tensorrt`. By default, Frigate will use a single CPU detector. Other detectors may require additional configuration as described below. When using multiple detectors they will run in dedicated processes, but pull from a common queue of detection requests from across all cameras.
 
 ## Edge TPU Detector
 
@@ -123,14 +129,57 @@ detectors:
     type: edgetpu
     device: pci
 ```
+---
 
-## Hailo-8l
 
-This detector is available for use with Hailo-8 AI Acceleration Module.
+## Hailo-8
 
-See the [installation docs](../frigate/installation.md#hailo-8l) for information on configuring the hailo8.
+This detector is available for use with both Hailo-8 and Hailo-8L AI Acceleration Modules. The integration automatically detects your hardware architecture via the Hailo CLI and selects the appropriate default model if no custom model is specified.
+
+See the [installation docs](../frigate/installation.md#hailo-8l) for information on configuring the Hailo hardware.
 
 ### Configuration
+
+When configuring the Hailo detector, you have two options to specify the model: a local **path** or a **URL**.  
+If both are provided, the detector will first check for the model at the given local path. If the file is not found, it will download the model from the specified URL. The model file is cached under `/config/model_cache/hailo`.
+
+#### YOLO 
+
+Use this configuration for YOLO-based models. When no custom model path or URL is provided, the detector automatically downloads the default model based on the detected hardware:
+- **Hailo-8 hardware:** Uses **YOLOv6n** (default: `yolov6n.hef`)
+- **Hailo-8L hardware:** Uses **YOLOv6n** (default: `yolov6n.hef`)
+
+```yaml
+detectors:
+  hailo8l:
+    type: hailo8l
+    device: PCIe
+
+model:
+  width: 320
+  height: 320
+  input_tensor: nhwc
+  input_pixel_format: rgb
+  input_dtype: int
+  model_type: yolo-generic
+
+  # The detector automatically selects the default model based on your hardware:
+  # - For Hailo-8 hardware: YOLOv6n (default: yolov6n.hef)
+  # - For Hailo-8L hardware: YOLOv6n (default: yolov6n.hef)
+  #
+  # Optionally, you can specify a local model path to override the default.
+  # If a local path is provided and the file exists, it will be used instead of downloading.
+  # Example:
+  # path: /config/model_cache/hailo/yolov6n.hef
+  #
+  # You can also override using a custom URL:
+  # path: https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v2.14.0/hailo8/yolov6n.hef
+  # just make sure to give it the write configuration based on the model
+```
+
+#### SSD
+
+For SSD-based models, provide either a model path or URL to your compiled SSD model. The integration will first check the local path before downloading if necessary.
 
 ```yaml
 detectors:
@@ -142,10 +191,48 @@ model:
   width: 300
   height: 300
   input_tensor: nhwc
-  input_pixel_format: bgr
+  input_pixel_format: rgb
   model_type: ssd
-  path: /config/model_cache/h8l_cache/ssd_mobilenet_v1.hef
+  # Specify the local model path (if available) or URL for SSD MobileNet v1.
+  # Example with a local path:
+  # path: /config/model_cache/h8l_cache/ssd_mobilenet_v1.hef
+  #
+  # Or override using a custom URL:
+  # path: https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v2.14.0/hailo8l/ssd_mobilenet_v1.hef
 ```
+
+#### Custom Models
+
+The Hailo detector supports all YOLO models compiled for Hailo hardware that include post-processing. You can specify a custom URL or a local path to download or use your model directly. If both are provided, the detector checks the local path first.
+
+```yaml
+detectors:
+  hailo8l:
+    type: hailo8l
+    device: PCIe
+
+model:
+  width: 640
+  height: 640
+  input_tensor: nhwc
+  input_pixel_format: rgb
+  input_dtype: int
+  model_type: yolo-generic
+  # Optional: Specify a local model path.
+  # path: /config/model_cache/hailo/custom_model.hef
+  #
+  # Alternatively, or as a fallback, provide a custom URL:
+  # path: https://custom-model-url.com/path/to/model.hef
+```
+For additional ready-to-use models, please visit: https://github.com/hailo-ai/hailo_model_zoo
+
+Hailo8 supports all models in the Hailo Model Zoo that include HailoRT post-processing. You're welcome to choose any of these pre-configured models for your implementation. 
+
+> **Note:**  
+> The config.path parameter can accept either a local file path or a URL ending with .hef. When provided, the detector will first check if the path is a local file path. If the file exists locally, it will use it directly. If the file is not found locally or if a URL was provided, it will attempt to download the model from the specified URL.
+
+---
+
 
 
 ## OpenVINO Detector
@@ -225,7 +312,7 @@ Note that the labelmap uses a subset of the complete COCO label set that has onl
 
 #### YOLOv9
 
-[YOLOv9](https://github.com/MultimediaTechLab/YOLO) models are supported, but not included by default.
+[YOLOv9](https://github.com/WongKinYiu/yolov9) models are supported, but not included by default.
 
 :::tip
 
@@ -362,7 +449,7 @@ model:
 
 ### Setup
 
-The `rocm` detector supports running YOLO-NAS models on AMD GPUs. Use a frigate docker image with `-rocm` suffix, for example `ghcr.io/blakeblackshear/frigate:stable-rocm`.
+Support for AMD GPUs is provided using the [ONNX detector](#ONNX). In order to utilize the AMD GPU for object detection use a frigate docker image with `-rocm` suffix, for example `ghcr.io/blakeblackshear/frigate:stable-rocm`.
 
 ### Docker settings for GPU access
 
@@ -412,7 +499,7 @@ When using docker compose:
 ```yaml
 services:
   frigate:
-...
+
 environment:
   HSA_OVERRIDE_GFX_VERSION: "9.0.0"
 ```
@@ -441,29 +528,9 @@ $ docker exec -it frigate /bin/bash -c '(unset HSA_OVERRIDE_GFX_VERSION && /opt/
 
 ### Supported Models
 
-There is no default model provided, the following formats are supported:
-
-#### YOLO-NAS
-
-[YOLO-NAS](https://github.com/Deci-AI/super-gradients/blob/master/YOLONAS.md) models are supported, but not included by default. See [the models section](#downloading-yolo-nas-model) for more information on downloading the YOLO-NAS model for use in Frigate.
-
-After placing the downloaded onnx model in your config folder, you can use the following configuration:
-
-```yaml
-detectors:
-  rocm:
-    type: rocm
-
-model:
-  model_type: yolonas
-  width: 320 # <--- should match whatever was set in notebook
-  height: 320 # <--- should match whatever was set in notebook
-  input_pixel_format: bgr
-  path: /config/yolo_nas_s.onnx
-  labelmap_path: /labelmap/coco-80.txt
-```
-
-Note that the labelmap uses a subset of the complete COCO label set that has only 80 objects.
+See [ONNX supported models](#supported-models) for supported models, there are some caveats:
+- D-FINE models are not supported
+- YOLO-NAS models are known to not run well on integrated GPUs
 
 ## ONNX
 
@@ -528,7 +595,7 @@ model:
 
 #### YOLOv9
 
-[YOLOv9](https://github.com/MultimediaTechLab/YOLO) models are supported, but not included by default.
+[YOLOv9](https://github.com/WongKinYiu/yolov9) models are supported, but not included by default.
 
 :::tip
 
@@ -550,6 +617,35 @@ model:
   input_tensor: nchw
   input_dtype: float
   path: /config/model_cache/yolov9-t.onnx
+  labelmap_path: /labelmap/coco-80.txt
+```
+
+Note that the labelmap uses a subset of the complete COCO label set that has only 80 objects.
+
+#### D-FINE
+
+[D-FINE](https://github.com/Peterande/D-FINE) is the [current state of the art](https://paperswithcode.com/sota/real-time-object-detection-on-coco?p=d-fine-redefine-regression-task-in-detrs-as) at the time of writing. The ONNX exported models are supported, but not included by default. See [the models section](#downloading-d-fine-model) for more information on downloading the D-FINE model for use in Frigate.
+
+:::warning
+
+D-FINE is currently not supported on OpenVINO
+
+:::
+
+After placing the downloaded onnx model in your config/model_cache folder, you can use the following configuration:
+
+```yaml
+detectors:
+  onnx:
+    type: onnx
+
+model:
+  model_type: dfine
+  width: 640
+  height: 640
+  input_tensor: nchw
+  input_dtype: float
+  path: /config/model_cache/dfine_m_obj2coco.onnx
   labelmap_path: /labelmap/coco-80.txt
 ```
 
@@ -704,7 +800,7 @@ To convert a onnx model to the rknn format using the [rknn-toolkit2](https://git
 This is an example configuration file that you need to adjust to your specific onnx model:
 
 ```yaml
-soc: ["rk3562","rk3566", "rk3568", "rk3576", "rk3588"]
+soc: ["rk3562", "rk3566", "rk3568", "rk3576", "rk3588"]
 quantization: false
 
 output_name: "{input_basename}"
@@ -734,6 +830,29 @@ Some model types are not included in Frigate by default.
 ## Downloading Models
 
 Here are some tips for getting different model types
+
+### Downloading D-FINE Model
+
+To export as ONNX:
+
+1. Clone: https://github.com/Peterande/D-FINE and install all dependencies.
+2. Select and download a checkpoint from the [readme](https://github.com/Peterande/D-FINE).
+3. Modify line 58 of `tools/deployment/export_onnx.py` and change batch size to 1: `data = torch.rand(1, 3, 640, 640)`
+4. Run the export, making sure you select the right config, for your checkpoint.
+
+Example:
+
+```
+python3 tools/deployment/export_onnx.py -c configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml -r output/dfine_m_obj2coco.pth
+```
+
+:::tip
+
+Model export has only been tested on Linux (or WSL2). Not all dependencies are in `requirements.txt`. Some live in the deployment folder, and some are still missing entirely and must be installed manually.
+
+Make sure you change the batch size to 1 before exporting.
+
+:::
 
 ### Downloading YOLO-NAS Model
 

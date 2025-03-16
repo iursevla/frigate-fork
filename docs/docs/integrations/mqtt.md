@@ -54,7 +54,9 @@ Message published for each changed tracked object. The first message is publishe
     }, // attributes with top score that have been identified on the object at any point
     "current_attributes": [], // detailed data about the current attributes in this frame
     "current_estimated_speed": 0.71, // current estimated speed (mph or kph) for objects moving through zones with speed estimation enabled
-    "velocity_angle": 180 // direction of travel relative to the frame for objects moving through zones with speed estimation enabled
+    "velocity_angle": 180, // direction of travel relative to the frame for objects moving through zones with speed estimation enabled
+    "recognized_license_plate": "ABC12345", // a recognized license plate for car objects
+    "recognized_license_plate_score": 0.933451
   },
   "after": {
     "id": "1607123955.475377-mxklsc",
@@ -93,7 +95,9 @@ Message published for each changed tracked object. The first message is publishe
       }
     ],
     "current_estimated_speed": 0.77, // current estimated speed (mph or kph) for objects moving through zones with speed estimation enabled
-    "velocity_angle": 180 // direction of travel relative to the frame for objects moving through zones with speed estimation enabled
+    "velocity_angle": 180, // direction of travel relative to the frame for objects moving through zones with speed estimation enabled
+    "recognized_license_plate": "ABC12345", // a recognized license plate for car objects
+    "recognized_license_plate_score": 0.933451
   }
 }
 ```
@@ -221,6 +225,14 @@ Publishes the dBFS value for audio detected on this camera.
 Publishes the rms value for audio detected on this camera.
 
 **NOTE:** Requires audio detection to be enabled
+
+### `frigate/<camera_name>/enabled/set`
+
+Topic to turn Frigate's processing of a camera on and off. Expected values are `ON` and `OFF`.
+
+### `frigate/<camera_name>/enabled/state`
+
+Topic with current state of processing for a camera. Published values are `ON` and `OFF`.
 
 ### `frigate/<camera_name>/detect/set`
 

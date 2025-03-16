@@ -71,6 +71,8 @@ import {
 } from "@/components/ui/popover";
 import { LuInfo } from "react-icons/lu";
 import { TooltipPortal } from "@radix-ui/react-tooltip";
+import { FaPencilAlt } from "react-icons/fa";
+import TextEntryDialog from "@/components/overlay/dialog/TextEntryDialog";
 
 const SEARCH_TABS = [
   "details",
@@ -288,6 +290,7 @@ function ObjectDetailsTab({
   // data
 
   const [desc, setDesc] = useState(search?.data.description);
+  const [isSubLabelDialogOpen, setIsSubLabelDialogOpen] = useState(false);
 
   const handleDescriptionFocus = useCallback(() => {
     setInputFocused(true);
@@ -325,6 +328,23 @@ function ObjectDetailsTab({
 
     if (search.sub_label && search.data?.sub_label_score) {
       return Math.round((search.data?.sub_label_score ?? 0) * 100);
+    } else {
+      return undefined;
+    }
+  }, [search]);
+
+  const recognizedLicensePlateScore = useMemo(() => {
+    if (!search) {
+      return undefined;
+    }
+
+    if (
+      search.data.recognized_license_plate &&
+      search.data?.recognized_license_plate_score
+    ) {
+      return Math.round(
+        (search.data?.recognized_license_plate_score ?? 0) * 100,
+      );
     } else {
       return undefined;
     }
@@ -391,8 +411,12 @@ function ObjectDetailsTab({
           },
         );
       })
-      .catch(() => {
-        toast.error("Failed to update the description", {
+      .catch((error) => {
+        const errorMessage =
+          error.response?.data?.message ||
+          error.response?.data?.detail ||
+          "Unknown error";
+        toast.error(`Failed to update the description: ${errorMessage}`, {
           position: "top-center",
         });
         setDesc(search.data.description);
@@ -419,15 +443,89 @@ function ObjectDetailsTab({
           }
         })
         .catch((error) => {
+          const errorMessage =
+            error.response?.data?.message ||
+            error.response?.data?.detail ||
+            "Unknown error";
           toast.error(
-            `Failed to call ${capitalizeAll(config?.genai.provider.replaceAll("_", " ") ?? "Generative AI")} for a new description: ${error.response.data.message}`,
-            {
-              position: "top-center",
-            },
+            `Failed to call ${capitalizeAll(config?.genai.provider.replaceAll("_", " ") ?? "Generative AI")} for a new description: ${errorMessage}`,
+            { position: "top-center" },
           );
         });
     },
     [search, config],
+  );
+
+  const handleSubLabelSave = useCallback(
+    (text: string) => {
+      if (!search) return;
+
+      // set score to 1.0 if we're manually entering a sub label
+      const subLabelScore =
+        text === "" ? undefined : search.data?.sub_label_score || 1.0;
+
+      axios
+        .post(`${apiHost}api/events/${search.id}/sub_label`, {
+          camera: search.camera,
+          subLabel: text,
+          subLabelScore: subLabelScore,
+        })
+        .then((response) => {
+          if (response.status === 200) {
+            toast.success("Successfully updated sub label.", {
+              position: "top-center",
+            });
+
+            mutate(
+              (key) =>
+                typeof key === "string" &&
+                (key.includes("events") ||
+                  key.includes("events/search") ||
+                  key.includes("events/explore")),
+              (currentData: SearchResult[][] | SearchResult[] | undefined) => {
+                if (!currentData) return currentData;
+                return currentData.flat().map((event) =>
+                  event.id === search.id
+                    ? {
+                        ...event,
+                        sub_label: text,
+                        data: {
+                          ...event.data,
+                          sub_label_score: subLabelScore,
+                        },
+                      }
+                    : event,
+                );
+              },
+              {
+                optimisticData: true,
+                rollbackOnError: true,
+                revalidate: false,
+              },
+            );
+
+            setSearch({
+              ...search,
+              sub_label: text,
+              data: {
+                ...search.data,
+                sub_label_score: subLabelScore,
+              },
+            });
+            setIsSubLabelDialogOpen(false);
+          }
+        })
+        .catch((error) => {
+          const errorMessage =
+            error.response?.data?.message ||
+            error.response?.data?.detail ||
+            "Unknown error";
+          toast.error(`Failed to update sub label: ${errorMessage}`, {
+            position: "top-center",
+          });
+        });
+    },
+    [search, apiHost, mutate, setSearch],
   );
 
   return (
@@ -440,8 +538,37 @@ function ObjectDetailsTab({
               {getIconForLabel(search.label, "size-4 text-primary")}
               {search.label}
               {search.sub_label && ` (${search.sub_label})`}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <FaPencilAlt
+                      className="size-4 cursor-pointer text-primary/40 hover:text-primary/80"
+                      onClick={() => {
+                        setIsSubLabelDialogOpen(true);
+                      }}
+                    />
+                  </span>
+                </TooltipTrigger>
+                <TooltipPortal>
+                  <TooltipContent>Edit sub label</TooltipContent>
+                </TooltipPortal>
+              </Tooltip>
             </div>
           </div>
+          {search?.data.recognized_license_plate && (
+            <div className="flex flex-col gap-1.5">
+              <div className="text-sm text-primary/40">
+                Recognized License Plate
+              </div>
+              <div className="flex flex-col space-y-0.5 text-sm">
+                <div className="flex flex-row items-center gap-2">
+                  {search.data.recognized_license_plate}{" "}
+                  {recognizedLicensePlateScore &&
+                    ` (${recognizedLicensePlateScore}%)`}
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <div className="text-sm text-primary/40">
               <div className="flex flex-row items-center gap-1">
@@ -511,7 +638,7 @@ function ObjectDetailsTab({
                 : undefined
             }
             draggable={false}
-            src={`${apiHost}api/events/${search.id}/thumbnail.jpg`}
+            src={`${apiHost}api/events/${search.id}/thumbnail.webp`}
           />
           {config?.semantic_search.enabled && search.data.type == "object" && (
             <Button
@@ -616,6 +743,15 @@ function ObjectDetailsTab({
               Save
             </Button>
           )}
+          <TextEntryDialog
+            open={isSubLabelDialogOpen}
+            setOpen={setIsSubLabelDialogOpen}
+            title="Edit Sub Label"
+            description={`Enter a new sub label for this ${search.label ?? "tracked object"}.`}
+            onSave={handleSubLabelSave}
+            defaultValue={search?.sub_label || ""}
+            allowEmpty={true}
+          />
         </div>
       </div>
     </div>

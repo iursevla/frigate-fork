@@ -396,10 +396,12 @@ export default function DraggableGridLayout({
     const initialVolumeStates: VolumeState = {};
 
     Object.entries(allGroupsStreamingSettings).forEach(([_, groupSettings]) => {
-      Object.entries(groupSettings).forEach(([camera, cameraSettings]) => {
-        initialAudioStates[camera] = cameraSettings.playAudio ?? false;
-        initialVolumeStates[camera] = cameraSettings.volume ?? 1;
-      });
+      if (groupSettings) {
+        Object.entries(groupSettings).forEach(([camera, cameraSettings]) => {
+          initialAudioStates[camera] = cameraSettings.playAudio ?? false;
+          initialVolumeStates[camera] = cameraSettings.volume ?? 1;
+        });
+      }
     });
 
     setAudioStates(initialAudioStates);
@@ -584,6 +586,7 @@ export default function DraggableGridLayout({
                   resetPreferredLiveMode={() =>
                     resetPreferredLiveMode(camera.name)
                   }
+                  config={config}
                 >
                   <LivePlayer
                     key={camera.name}
@@ -790,6 +793,7 @@ type GridLiveContextMenuProps = {
   muteAll: () => void;
   unmuteAll: () => void;
   resetPreferredLiveMode: () => void;
+  config?: FrigateConfig;
 };
 
 const GridLiveContextMenu = React.forwardRef<
@@ -819,6 +823,7 @@ const GridLiveContextMenu = React.forwardRef<
       muteAll,
       unmuteAll,
       resetPreferredLiveMode,
+      config,
       ...props
     },
     ref,
@@ -849,6 +854,7 @@ const GridLiveContextMenu = React.forwardRef<
           muteAll={muteAll}
           unmuteAll={unmuteAll}
           resetPreferredLiveMode={resetPreferredLiveMode}
+          config={config}
         >
           {children}
         </LiveContextMenu>

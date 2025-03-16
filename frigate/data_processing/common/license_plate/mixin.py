@@ -8,103 +8,35 @@ from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
-import requests
 from Levenshtein import distance
 from pyclipper import ET_CLOSEDPOLYGON, JT_ROUND, PyclipperOffset
 from shapely.geometry import Polygon
 
-from frigate.comms.inter_process import InterProcessRequestor
-from frigate.config import FrigateConfig
-from frigate.const import FRIGATE_LOCALHOST
-from frigate.embeddings.functions.onnx import GenericONNXEmbedding, ModelTypeEnum
+from frigate.comms.event_metadata_updater import EventMetadataTypeEnum
 from frigate.util.image import area
-
-from ..types import DataProcessorMetrics
-from .api import RealTimeProcessorApi
 
 logger = logging.getLogger(__name__)
 
 WRITE_DEBUG_IMAGES = False
 
 
-class LicensePlateProcessor(RealTimeProcessorApi):
-    def __init__(self, config: FrigateConfig, metrics: DataProcessorMetrics):
-        super().__init__(config, metrics)
-        self.requestor = InterProcessRequestor()
-        self.lpr_config = config.lpr
+class LicensePlateProcessingMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
         self.requires_license_plate_detection = (
             "license_plate" not in self.config.objects.all_objects
         )
-        self.detected_license_plates: dict[str, dict[str, any]] = {}
 
         self.ctc_decoder = CTCDecoder()
 
         self.batch_size = 6
 
         # Detection specific parameters
-        self.min_size = 3
+        self.min_size = 8
         self.max_size = 960
-        self.box_thresh = 0.8
-        self.mask_thresh = 0.8
-
-        self.lpr_detection_model = None
-        self.lpr_classification_model = None
-        self.lpr_recognition_model = None
-
-        if self.config.lpr.enabled:
-            self.detection_model = GenericONNXEmbedding(
-                model_name="paddleocr-onnx",
-                model_file="detection.onnx",
-                download_urls={
-                    "detection.onnx": "https://github.com/hawkeye217/paddleocr-onnx/raw/refs/heads/master/models/detection.onnx"
-                },
-                model_size="large",
-                model_type=ModelTypeEnum.lpr_detect,
-                requestor=self.requestor,
-                device="CPU",
-            )
-
-            self.classification_model = GenericONNXEmbedding(
-                model_name="paddleocr-onnx",
-                model_file="classification.onnx",
-                download_urls={
-                    "classification.onnx": "https://github.com/hawkeye217/paddleocr-onnx/raw/refs/heads/master/models/classification.onnx"
-                },
-                model_size="large",
-                model_type=ModelTypeEnum.lpr_classify,
-                requestor=self.requestor,
-                device="CPU",
-            )
-
-            self.recognition_model = GenericONNXEmbedding(
-                model_name="paddleocr-onnx",
-                model_file="recognition.onnx",
-                download_urls={
-                    "recognition.onnx": "https://github.com/hawkeye217/paddleocr-onnx/raw/refs/heads/master/models/recognition.onnx"
-                },
-                model_size="large",
-                model_type=ModelTypeEnum.lpr_recognize,
-                requestor=self.requestor,
-                device="CPU",
-            )
-            self.yolov9_detection_model = GenericONNXEmbedding(
-                model_name="yolov9_license_plate",
-                model_file="yolov9-256-license-plates.onnx",
-                download_urls={
-                    "yolov9-256-license-plates.onnx": "https://github.com/hawkeye217/yolov9-license-plates/raw/refs/heads/master/models/yolov9-256-license-plates.onnx"
-                },
-                model_size="large",
-                model_type=ModelTypeEnum.yolov9_lpr_detect,
-                requestor=self.requestor,
-                device="CPU",
-            )
-
-        if self.lpr_config.enabled:
-            # all models need to be loaded to run LPR
-            self.detection_model._load_model_and_utils()
-            self.classification_model._load_model_and_utils()
-            self.recognition_model._load_model_and_utils()
-            self.yolov9_detection_model._load_model_and_utils()
+        self.box_thresh = 0.6
+        self.mask_thresh = 0.6
 
     def _detect(self, image: np.ndarray) -> List[np.ndarray]:
         """
@@ -132,7 +64,7 @@ class LicensePlateProcessor(RealTimeProcessorApi):
                 resized_image,
             )
 
-        outputs = self.detection_model([normalized_image])[0]
+        outputs = self.model_runner.detection_model([normalized_image])[0]
         outputs = outputs[0, :, :]
 
         boxes, _ = self._boxes_from_bitmap(outputs, outputs > self.mask_thresh, w, h)
@@ -161,7 +93,7 @@ class LicensePlateProcessor(RealTimeProcessorApi):
                 norm_img = norm_img[np.newaxis, :]
                 norm_images.append(norm_img)
 
-        outputs = self.classification_model(norm_images)
+        outputs = self.model_runner.classification_model(norm_images)
 
         return self._process_classification_output(images, outputs)
 
@@ -201,7 +133,7 @@ class LicensePlateProcessor(RealTimeProcessorApi):
                 norm_image = norm_image[np.newaxis, :]
                 norm_images.append(norm_image)
 
-        outputs = self.recognition_model(norm_images)
+        outputs = self.model_runner.recognition_model(norm_images)
         return self.ctc_decoder(outputs)
 
     def _process_license_plate(
@@ -217,55 +149,48 @@ class LicensePlateProcessor(RealTimeProcessorApi):
             Tuple[List[str], List[float], List[int]]: Detected license plate texts, confidence scores, and areas of the plates.
         """
         if (
-            self.detection_model.runner is None
-            or self.classification_model.runner is None
-            or self.recognition_model.runner is None
+            self.model_runner.detection_model.runner is None
+            or self.model_runner.classification_model.runner is None
+            or self.model_runner.recognition_model.runner is None
         ):
             # we might still be downloading the models
             logger.debug("Model runners not loaded")
             return [], [], []
 
-        plate_points = self._detect(image)
-        if len(plate_points) == 0:
-            logger.debug("No points found by OCR detector model")
+        boxes = self._detect(image)
+        if len(boxes) == 0:
+            logger.debug("No boxes found by OCR detector model")
             return [], [], []
 
-        plate_points = self._sort_polygon(list(plate_points))
-        plate_images = [self._crop_license_plate(image, x) for x in plate_points]
-        rotated_images, _ = self._classify(plate_images)
+        boxes = self._sort_boxes(list(boxes))
+        plate_images = [self._crop_license_plate(image, x) for x in boxes]
 
-        # debug rotated and classification result
         if WRITE_DEBUG_IMAGES:
             current_time = int(datetime.datetime.now().timestamp())
             for i, img in enumerate(plate_images):
                 cv2.imwrite(
-                    f"debug/frames/license_plate_rotated_{current_time}_{i + 1}.jpg",
-                    img,
-                )
-            for i, img in enumerate(rotated_images):
-                cv2.imwrite(
-                    f"debug/frames/license_plate_classified_{current_time}_{i + 1}.jpg",
+                    f"debug/frames/license_plate_cropped_{current_time}_{i + 1}.jpg",
                     img,
                 )
 
         # keep track of the index of each image for correct area calc later
-        sorted_indices = np.argsort([x.shape[1] / x.shape[0] for x in rotated_images])
+        sorted_indices = np.argsort([x.shape[1] / x.shape[0] for x in plate_images])
         reverse_mapping = {
             idx: original_idx for original_idx, idx in enumerate(sorted_indices)
         }
 
-        results, confidences = self._recognize(rotated_images)
+        results, confidences = self._recognize(plate_images)
 
         if results:
-            license_plates = [""] * len(rotated_images)
-            average_confidences = [[0.0]] * len(rotated_images)
-            areas = [0] * len(rotated_images)
+            license_plates = [""] * len(plate_images)
+            average_confidences = [[0.0]] * len(plate_images)
+            areas = [0] * len(plate_images)
 
             # map results back to original image order
             for i, (plate, conf) in enumerate(zip(results, confidences)):
                 original_idx = reverse_mapping[i]
 
-                height, width = rotated_images[original_idx].shape[:2]
+                height, width = plate_images[original_idx].shape[:2]
                 area = height * width
 
                 average_confidence = conf
@@ -273,7 +198,7 @@ class LicensePlateProcessor(RealTimeProcessorApi):
                 # set to True to write each cropped image for debugging
                 if False:
                     save_image = cv2.cvtColor(
-                        rotated_images[original_idx], cv2.COLOR_RGB2BGR
+                        plate_images[original_idx], cv2.COLOR_RGB2BGR
                     )
                     filename = f"debug/frames/plate_{original_idx}_{plate}_{area}.jpg"
                     cv2.imwrite(filename, save_image)
@@ -395,7 +320,7 @@ class LicensePlateProcessor(RealTimeProcessorApi):
             # Use pyclipper to shrink the polygon slightly based on the computed distance.
             offset = PyclipperOffset()
             offset.AddPath(points, JT_ROUND, ET_CLOSEDPOLYGON)
-            points = np.array(offset.Execute(distance * 1.5)).reshape((-1, 1, 2))
+            points = np.array(offset.Execute(distance * 1.75)).reshape((-1, 1, 2))
 
             # get the minimum bounding box around the shrunken polygon.
             box, min_side = self._get_min_boxes(points)
@@ -520,46 +445,64 @@ class LicensePlateProcessor(RealTimeProcessorApi):
         )
 
     @staticmethod
-    def _clockwise_order(point: np.ndarray) -> np.ndarray:
+    def _clockwise_order(pts: np.ndarray) -> np.ndarray:
         """
-        Arrange the points of a polygon in clockwise order based on their angular positions
-        around the polygon's center.
+        Arrange the points of a polygon in order: top-left, top-right, bottom-right, bottom-left.
+        taken from https://github.com/PyImageSearch/imutils/blob/master/imutils/perspective.py
 
         Args:
-            point (np.ndarray): Array of points of the polygon.
+            pts (np.ndarray): Array of points of the polygon.
 
         Returns:
-            np.ndarray: Points ordered in clockwise direction.
+            np.ndarray: Points ordered clockwise starting from top-left.
         """
-        center = point.mean(axis=0)
-        return point[
-            np.argsort(np.arctan2(point[:, 1] - center[1], point[:, 0] - center[0]))
-        ]
+        # Sort the points based on their x-coordinates
+        x_sorted = pts[np.argsort(pts[:, 0]), :]
+
+        # Separate the left-most and right-most points
+        left_most = x_sorted[:2, :]
+        right_most = x_sorted[2:, :]
+
+        # Sort the left-most coordinates by y-coordinates
+        left_most = left_most[np.argsort(left_most[:, 1]), :]
+        (tl, bl) = left_most  # Top-left and bottom-left
+
+        # Use the top-left as an anchor to calculate distances to right points
+        # The further point will be the bottom-right
+        distances = np.sqrt(
+            ((tl[0] - right_most[:, 0]) ** 2) + ((tl[1] - right_most[:, 1]) ** 2)
+        )
+
+        # Sort right points by distance (descending)
+        right_idx = np.argsort(distances)[::-1]
+        (br, tr) = right_most[right_idx, :]  # Bottom-right and top-right
+
+        return np.array([tl, tr, br, bl])
 
     @staticmethod
-    def _sort_polygon(points):
+    def _sort_boxes(boxes):
         """
-        Sort polygons based on their position in the image. If polygons are close in vertical
+        Sort polygons based on their position in the image. If boxes are close in vertical
         position (within 5 pixels), sort them by horizontal position.
 
         Args:
-            points: List of polygons to sort.
+            points: detected text boxes with shape [4, 2]
 
         Returns:
-            List: Sorted list of polygons.
+            List: sorted boxes(array) with shape [4, 2]
         """
-        points.sort(key=lambda x: (x[0][1], x[0][0]))
-        for i in range(len(points) - 1):
+        boxes.sort(key=lambda x: (x[0][1], x[0][0]))
+        for i in range(len(boxes) - 1):
             for j in range(i, -1, -1):
-                if abs(points[j + 1][0][1] - points[j][0][1]) < 5 and (
-                    points[j + 1][0][0] < points[j][0][0]
+                if abs(boxes[j + 1][0][1] - boxes[j][0][1]) < 5 and (
+                    boxes[j + 1][0][0] < boxes[j][0][0]
                 ):
-                    temp = points[j]
-                    points[j] = points[j + 1]
-                    points[j + 1] = temp
+                    temp = boxes[j]
+                    boxes[j] = boxes[j + 1]
+                    boxes[j + 1] = temp
                 else:
                     break
-        return points
+        return boxes
 
     @staticmethod
     def _zero_pad(image: np.ndarray) -> np.ndarray:
@@ -650,9 +593,11 @@ class LicensePlateProcessor(RealTimeProcessorApi):
             for j in range(len(outputs)):
                 label, score = outputs[j]
                 results[indices[i + j]] = [label, score]
-                # make sure we have high confidence if we need to flip a box, this will be rare in lpr
-                if "180" in label and score >= 0.9:
-                    images[indices[i + j]] = cv2.rotate(images[indices[i + j]], 1)
+                # make sure we have high confidence if we need to flip a box
+                if "180" in label and score >= 0.7:
+                    images[indices[i + j]] = cv2.rotate(
+                        images[indices[i + j]], cv2.ROTATE_180
+                    )
 
         return images, results
 
@@ -683,7 +628,9 @@ class LicensePlateProcessor(RealTimeProcessorApi):
         input_w = int(input_h * max_wh_ratio)
 
         # check for model-specific input width
-        model_input_w = self.recognition_model.runner.ort.get_inputs()[0].shape[3]
+        model_input_w = self.model_runner.recognition_model.runner.ort.get_inputs()[
+            0
+        ].shape[3]
         if isinstance(model_input_w, int) and model_input_w > 0:
             input_w = model_input_w
 
@@ -747,14 +694,8 @@ class LicensePlateProcessor(RealTimeProcessorApi):
         )
         height, width = image.shape[0:2]
         if height * 1.0 / width >= 1.5:
-            image = np.rot90(image, k=3)
+            image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
         return image
-
-    def __update_metrics(self, duration: float) -> None:
-        """
-        Update inference metrics.
-        """
-        self.metrics.alpr_pps.value = (self.metrics.alpr_pps.value * 9 + duration) / 10
 
     def _detect_license_plate(self, input: np.ndarray) -> tuple[int, int, int, int]:
         """
@@ -762,7 +703,7 @@ class LicensePlateProcessor(RealTimeProcessorApi):
 
         Return the dimensions of the detected plate as [x1, y1, x2, y2].
         """
-        predictions = self.yolov9_detection_model(input)
+        predictions = self.model_runner.yolov9_detection_model(input)
 
         confidence_threshold = self.lpr_config.detection_threshold
 
@@ -788,8 +729,8 @@ class LicensePlateProcessor(RealTimeProcessorApi):
 
         # Return the top scoring bounding box if found
         if top_box is not None:
-            # expand box by 15% to help with OCR
-            expansion = (top_box[2:] - top_box[:2]) * 0.1
+            # expand box by 30% to help with OCR
+            expansion = (top_box[2:] - top_box[:2]) * 0.30
 
             # Expand box
             expanded_box = np.array(
@@ -887,9 +828,22 @@ class LicensePlateProcessor(RealTimeProcessorApi):
         # 5. Return True if we should keep the previous plate (i.e., if it scores higher)
         return prev_score > curr_score
 
-    def process_frame(self, obj_data: dict[str, any], frame: np.ndarray):
+    def __update_yolov9_metrics(self, duration: float) -> None:
+        """
+        Update inference metrics.
+        """
+        self.metrics.yolov9_lpr_fps.value = (
+            self.metrics.yolov9_lpr_fps.value * 9 + duration
+        ) / 10
+
+    def __update_lpr_metrics(self, duration: float) -> None:
+        """
+        Update inference metrics.
+        """
+        self.metrics.alpr_pps.value = (self.metrics.alpr_pps.value * 9 + duration) / 10
+
+    def lpr_process(self, obj_data: dict[str, any], frame: np.ndarray):
         """Look for license plates in image."""
-        start = datetime.datetime.now().timestamp()
 
         id = obj_data["id"]
 
@@ -915,6 +869,7 @@ class LicensePlateProcessor(RealTimeProcessorApi):
 
         if self.requires_license_plate_detection:
             logger.debug("Running manual license_plate detection.")
+
             car_box = obj_data.get("box")
 
             if not car_box:
@@ -939,6 +894,9 @@ class LicensePlateProcessor(RealTimeProcessorApi):
             logger.debug(
                 f"YOLOv9 LPD inference time: {(datetime.datetime.now().timestamp() - yolov9_start) * 1000:.2f} ms"
             )
+            self.__update_yolov9_metrics(
+                datetime.datetime.now().timestamp() - yolov9_start
+            )
 
             if not license_plate:
                 logger.debug("Detected no license plates for car object.")
@@ -952,7 +910,7 @@ class LicensePlateProcessor(RealTimeProcessorApi):
 
             # check that license plate is valid
             # double the value because we've doubled the size of the car
-            if license_plate_area < self.config.lpr.min_area * 2:
+            if license_plate_area < self.lpr_config.min_area * 2:
                 logger.debug("License plate is less than min_area")
                 return
 
@@ -979,26 +937,34 @@ class LicensePlateProcessor(RealTimeProcessorApi):
             if not license_plate:
                 return
 
-            if license_plate.get("score") < self.lpr_config.detection_threshold:
-                logger.debug(
-                    f"Plate detection score is less than the threshold ({license_plate['score']:0.2f} < {self.lpr_config.detection_threshold})"
-                )
-                return
-
             license_plate_box = license_plate.get("box")
 
             # check that license plate is valid
             if (
                 not license_plate_box
-                or area(license_plate_box) < self.config.lpr.min_area
+                or area(license_plate_box) < self.lpr_config.min_area
             ):
                 logger.debug(f"Invalid license plate box {license_plate}")
                 return
 
             license_plate_frame = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_I420)
+
+            # Expand the license_plate_box by 30%
+            box_array = np.array(license_plate_box)
+            expansion = (box_array[2:] - box_array[:2]) * 0.30
+            expanded_box = np.array(
+                [
+                    license_plate_box[0] - expansion[0],
+                    license_plate_box[1] - expansion[1],
+                    license_plate_box[2] + expansion[0],
+                    license_plate_box[3] + expansion[1],
+                ]
+            ).clip(0, [license_plate_frame.shape[1], license_plate_frame.shape[0]] * 2)
+
+            # Crop using the expanded box
             license_plate_frame = license_plate_frame[
-                license_plate_box[1] : license_plate_box[3],
-                license_plate_box[0] : license_plate_box[2],
+                int(expanded_box[1]) : int(expanded_box[3]),
+                int(expanded_box[0]) : int(expanded_box[2]),
             ]
 
         # double the size of the license plate frame for better OCR
@@ -1017,10 +983,14 @@ class LicensePlateProcessor(RealTimeProcessorApi):
                 license_plate_frame,
             )
 
+        start = datetime.datetime.now().timestamp()
+
         # run detection, returns results sorted by confidence, best first
         license_plates, confidences, areas = self._process_license_plate(
             license_plate_frame
         )
+
+        self.__update_lpr_metrics(datetime.datetime.now().timestamp() - start)
 
         logger.debug(f"Text boxes: {license_plates}")
         logger.debug(f"Confidences: {confidences}")
@@ -1078,27 +1048,26 @@ class LicensePlateProcessor(RealTimeProcessorApi):
                     for plate in plates
                 )
             ),
-            top_plate,
+            None,
         )
 
-        # Send the result to the API
-        resp = requests.post(
-            f"{FRIGATE_LOCALHOST}/api/events/{id}/sub_label",
-            json={
-                "camera": obj_data.get("camera"),
-                "subLabel": sub_label,
-                "subLabelScore": avg_confidence,
-            },
+        # If it's a known plate, publish to sub_label
+        if sub_label is not None:
+            self.sub_label_publisher.publish(
+                EventMetadataTypeEnum.sub_label, (id, sub_label, avg_confidence)
+            )
+
+        self.sub_label_publisher.publish(
+            EventMetadataTypeEnum.recognized_license_plate,
+            (id, top_plate, avg_confidence),
         )
 
-        if resp.status_code == 200:
-            self.detected_license_plates[id] = {
-                "plate": top_plate,
-                "char_confidences": top_char_confidences,
-                "area": top_area,
-            }
-
-        self.__update_metrics(datetime.datetime.now().timestamp() - start)
+        self.detected_license_plates[id] = {
+            "plate": top_plate,
+            "char_confidences": top_char_confidences,
+            "area": top_area,
+            "obj_data": obj_data,
+        }
 
     def handle_request(self, topic, request_data) -> dict[str, any] | None:
         return
