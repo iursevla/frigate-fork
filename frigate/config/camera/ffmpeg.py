@@ -1,4 +1,3 @@
-import shutil
 from enum import Enum
 from typing import Union
 
@@ -22,7 +21,7 @@ __all__ = [
 FFMPEG_GLOBAL_ARGS_DEFAULT = ["-hide_banner", "-loglevel", "warning", "-threads", "2"]
 FFMPEG_INPUT_ARGS_DEFAULT = "preset-rtsp-generic"
 
-RECORD_FFMPEG_OUTPUT_ARGS_DEFAULT = "preset-record-generic"
+RECORD_FFMPEG_OUTPUT_ARGS_DEFAULT = "preset-record-generic-audio-aac"
 DETECT_FFMPEG_OUTPUT_ARGS_DEFAULT = [
     "-threads",
     "2",
@@ -71,10 +70,7 @@ class FfmpegConfig(FrigateBaseModel):
     @property
     def ffmpeg_path(self) -> str:
         if self.path == "default":
-            if shutil.which("ffmpeg") is None:
-                return f"/usr/lib/ffmpeg/{DEFAULT_FFMPEG_VERSION}/bin/ffmpeg"
-            else:
-                return "ffmpeg"
+            return f"/usr/lib/ffmpeg/{DEFAULT_FFMPEG_VERSION}/bin/ffmpeg"
         elif self.path in INCLUDED_FFMPEG_VERSIONS:
             return f"/usr/lib/ffmpeg/{self.path}/bin/ffmpeg"
         else:
@@ -83,10 +79,7 @@ class FfmpegConfig(FrigateBaseModel):
     @property
     def ffprobe_path(self) -> str:
         if self.path == "default":
-            if shutil.which("ffprobe") is None:
-                return f"/usr/lib/ffmpeg/{DEFAULT_FFMPEG_VERSION}/bin/ffprobe"
-            else:
-                return "ffprobe"
+            return f"/usr/lib/ffmpeg/{DEFAULT_FFMPEG_VERSION}/bin/ffprobe"
         elif self.path in INCLUDED_FFMPEG_VERSIONS:
             return f"/usr/lib/ffmpeg/{self.path}/bin/ffprobe"
         else:

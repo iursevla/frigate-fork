@@ -20,6 +20,7 @@ export interface BirdseyeConfig {
   width: number;
 }
 
+export type SearchModel = "jinav1" | "jinav2";
 export type SearchModelSize = "small" | "large";
 
 export interface CameraConfig {
@@ -56,6 +57,7 @@ export interface CameraConfig {
     width: number;
   };
   enabled: boolean;
+  enabled_in_config: boolean;
   ffmpeg: {
     global_args: string[];
     hwaccel_args: string;
@@ -153,15 +155,20 @@ export interface CameraConfig {
   record: {
     enabled: boolean;
     enabled_in_config: boolean;
-    events: {
-      objects: string[] | null;
+    alerts: {
       post_capture: number;
       pre_capture: number;
-      required_zones: string[];
       retain: {
-        default: number;
+        days: number;
         mode: string;
-        objects: Record<string, unknown>;
+      };
+    };
+    detections: {
+      post_capture: number;
+      pre_capture: number;
+      retain: {
+        days: number;
+        mode: string;
       };
     };
     expire_interval: number;
@@ -326,7 +333,8 @@ export interface FrigateConfig {
 
   face_recognition: {
     enabled: boolean;
-    threshold: number;
+    detection_threshold: number;
+    recognition_threshold: number;
   };
 
   ffmpeg: {
@@ -361,6 +369,10 @@ export interface FrigateConfig {
   };
 
   camera_groups: { [groupName: string]: CameraGroupConfig };
+
+  lpr: {
+    enabled: boolean;
+  };
 
   logger: {
     default: string;
@@ -423,6 +435,10 @@ export interface FrigateConfig {
     enabled: boolean;
   };
 
+  proxy: {
+    logout_url?: string;
+  };
+
   record: {
     enabled: boolean;
     enabled_in_config: boolean | null;
@@ -458,6 +474,7 @@ export interface FrigateConfig {
   semantic_search: {
     enabled: boolean;
     reindex: boolean;
+    model: SearchModel;
     model_size: SearchModelSize;
   };
 

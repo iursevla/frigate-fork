@@ -255,6 +255,8 @@ ffmpeg:
 # Optional: Detect configuration
 # NOTE: Can be overridden at the camera level
 detect:
+  # Optional: enables detection for the camera (default: shown below)
+  enabled: False
   # Optional: width of the frame for the input with the detect role (default: use native stream resolution)
   width: 1280
   # Optional: height of the frame for the input with the detect role (default: use native stream resolution)
@@ -262,8 +264,6 @@ detect:
   # Optional: desired fps for your camera for the input with the detect role (default: shown below)
   # NOTE: Recommended value of 5. Ideally, try and reduce your FPS on the camera.
   fps: 5
-  # Optional: enables detection for the camera (default: True)
-  enabled: True
   # Optional: Number of consecutive detection hits required for an object to be initialized in the tracker. (default: 1/2 the frame rate)
   min_initialized: 2
   # Optional: Number of frames without a detection before Frigate considers an object to be gone. (default: 5x the frame rate)
@@ -420,6 +420,8 @@ notifications:
   # Optional: Email for push service to reach out to
   # NOTE: This is required to use notifications
   email: "admin@example.com"
+  # Optional: Cooldown time for notifications in seconds (default: shown below)
+  cooldown: 0
 
 # Optional: Record configuration
 # NOTE: Can be overridden at the camera level
@@ -534,6 +536,8 @@ semantic_search:
   enabled: False
   # Optional: Re-index embeddings database from historical tracked objects (default: shown below)
   reindex: False
+  # Optional: Set the model used for embeddings. (default: shown below)
+  model: "jinav1"
   # Optional: Set the model size used for embeddings. (default: shown below)
   # NOTE: small model runs on CPU and large model runs on GPU
   model_size: "small"
@@ -566,7 +570,6 @@ lpr:
   known_plates: {}
 
 # Optional: Configuration for AI generated tracked object descriptions
-# NOTE: Semantic Search must be enabled for this to do anything.
 # WARNING: Depending on the provider, this will send thumbnails over the internet
 # to Google or OpenAI's LLMs to generate descriptions. It can be overridden at
 # the camera level (enabled: False) to enhance privacy for indoor cameras.
@@ -588,7 +591,7 @@ genai:
     person: "My special person prompt."
 
 # Optional: Restream configuration
-# Uses https://github.com/AlexxIT/go2rtc (v1.9.2)
+# Uses https://github.com/AlexxIT/go2rtc (v1.9.9)
 # NOTE: The default go2rtc API port (1984) must be used,
 #       changing this port for the integrated go2rtc instance is not supported.
 go2rtc:
@@ -810,6 +813,12 @@ cameras:
         - cat
       # Optional: Restrict generation to objects that entered any of the listed zones (default: none, all zones qualify)
       required_zones: []
+      # Optional: What triggers to use to send frames for a tracked object to generative AI (default: shown below)
+      send_triggers:
+        # Once the object is no longer tracked
+        tracked_object_end: True
+        # Optional: After X many significant updates are received (default: shown below)
+        after_significant_updates: None
       # Optional: Save thumbnails sent to generative AI for review/debugging purposes (default: shown below)
       debug_save_thumbnails: False
 

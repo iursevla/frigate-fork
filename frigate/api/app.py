@@ -20,14 +20,15 @@ from fastapi.params import Depends
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from markupsafe import escape
 from peewee import operator
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import ValidationError
 
+from frigate.api.auth import require_role
 from frigate.api.defs.query.app_query_parameters import AppTimelineHourlyQueryParameters
 from frigate.api.defs.request.app_body import AppConfigSetBody
 from frigate.api.defs.tags import Tags
 from frigate.config import FrigateConfig
 from frigate.models import Event, Timeline
+from frigate.stats.prometheus import get_metrics, update_metrics
 from frigate.util.builtin import (
     clean_camera_user_pass,
     get_tz_modifiers,
@@ -113,9 +114,13 @@ def stats_history(request: Request, keys: str = None):
 
 
 @router.get("/metrics")
-def metrics():
-    """Expose Prometheus metrics endpoint"""
-    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+def metrics(request: Request):
+    """Expose Prometheus metrics endpoint and update metrics with latest stats"""
+    # Retrieve the latest statistics and update the Prometheus metrics
+    stats = request.app.stats_emitter.get_latest_stats()
+    update_metrics(stats)
+    content, content_type = get_metrics()
+    return Response(content=content, media_type=content_type)
 
 
 @router.get("/config")
@@ -197,7 +202,7 @@ def config_raw():
         )
 
 
-@router.post("/config/save")
+@router.post("/config/save", dependencies=[Depends(require_role(["admin"]))])
 def config_save(save_option: str, body: Any = Body(media_type="text/plain")):
     new_config = body.decode()
     if not new_config:
@@ -322,7 +327,7 @@ def config_save(save_option: str, body: Any = Body(media_type="text/plain")):
         )
 
 
-@router.put("/config/set")
+@router.put("/config/set", dependencies=[Depends(require_role(["admin"]))])
 def config_set(request: Request, body: AppConfigSetBody):
     config_file = find_config_file()
 
@@ -538,7 +543,7 @@ async def logs(
         )
 
 
-@router.post("/restart")
+@router.post("/restart", dependencies=[Depends(require_role(["admin"]))])
 def restart():
     try:
         restart_frigate()
@@ -612,6 +617,41 @@ def get_sub_labels(split_joined: Optional[int] = None):
 
     sub_labels.sort()
     return JSONResponse(content=sub_labels)
+
+
+@router.get("/recognized_license_plates")
+def get_recognized_license_plates(split_joined: Optional[int] = None):
+    try:
+        events = Event.select(Event.data).distinct()
+    except Exception:
+        return JSONResponse(
+            content=(
+                {"success": False, "message": "Failed to get recognized license plates"}
+            ),
+            status_code=404,
+        )
+
+    recognized_license_plates = []
+    for e in events:
+        if e.data is not None and "recognized_license_plate" in e.data:
+            recognized_license_plates.append(e.data["recognized_license_plate"])
+
+    while None in recognized_license_plates:
+        recognized_license_plates.remove(None)
+
+    if split_joined:
+        original_recognized_license_plates = recognized_license_plates.copy()
+        for recognized_license_plate in original_recognized_license_plates:
+            if recognized_license_plate and "," in recognized_license_plate:
+                recognized_license_plates.remove(recognized_license_plate)
+                parts = recognized_license_plate.split(",")
+                for part in parts:
+                    if part.strip() not in recognized_license_plates:
+                        recognized_license_plates.append(part.strip())
+
+    recognized_license_plates = list(set(recognized_license_plates))
+    recognized_license_plates.sort()
+    return JSONResponse(content=recognized_license_plates)
 
 
 @router.get("/timeline")

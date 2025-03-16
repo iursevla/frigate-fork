@@ -17,7 +17,7 @@ from frigate.config import FrigateConfig
 from frigate.const import CONFIG_DIR, FACE_DIR
 from frigate.data_processing.types import DataProcessorMetrics
 from frigate.db.sqlitevecq import SqliteVecQueueDatabase
-from frigate.models import Event
+from frigate.models import Event, Recordings
 from frigate.util.builtin import serialize
 from frigate.util.services import listen
 
@@ -28,10 +28,6 @@ logger = logging.getLogger(__name__)
 
 
 def manage_embeddings(config: FrigateConfig, metrics: DataProcessorMetrics) -> None:
-    # Only initialize embeddings if semantic search is enabled
-    if not config.semantic_search.enabled:
-        return
-
     stop_event = mp.Event()
 
     def receiveSignal(signalNumber: int, frame: Optional[FrameType]) -> None:
@@ -55,7 +51,7 @@ def manage_embeddings(config: FrigateConfig, metrics: DataProcessorMetrics) -> N
         timeout=max(60, 10 * len([c for c in config.cameras.values() if c.enabled])),
         load_vec_extension=True,
     )
-    models = [Event]
+    models = [Event, Recordings]
     db.bind(models)
 
     maintainer = EmbeddingMaintainer(
@@ -229,8 +225,16 @@ class EmbeddingsContext:
             if os.path.isfile(file_path):
                 os.unlink(file_path)
 
+        if len(os.listdir(folder)) == 0:
+            os.rmdir(folder)
+
     def update_description(self, event_id: str, description: str) -> None:
         self.requestor.send_data(
             EmbeddingsRequestEnum.embed_description.value,
             {"id": event_id, "description": description},
+        )
+
+    def reprocess_plate(self, event: dict[str, any]) -> dict[str, any]:
+        return self.requestor.send_data(
+            EmbeddingsRequestEnum.reprocess_plate.value, {"event": event}
         )
