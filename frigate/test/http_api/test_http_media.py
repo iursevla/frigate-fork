@@ -37,3 +37,51 @@ class TestHttpMedia(BaseTestHttp):
                 {},
                 response_json,
             )
+
+    def test_get_camera_ptz_info_camera_with_onvif_config_success(self):
+        onvif_controller = OnvifController(
+            FrigateConfig(
+                **{
+                    "mqtt": {"host": "mqtt"},
+                    "cameras": {
+                        "front_door": {
+                            "ffmpeg": {
+                                "inputs": [
+                                    {
+                                        "path": "rtsp://10.0.0.1:554/video",
+                                        "roles": ["detect"],
+                                    }
+                                ]
+                            },
+                            "detect": {
+                                "height": 1080,
+                                "width": 1920,
+                                "fps": 5,
+                            },
+                            "onvif": {
+                                "host": "192.168.1.100",
+                                "port": 9000,
+                                "user": "rui",
+                            },
+                        }
+                    },
+                }
+            ),
+            {},
+        )
+        # Simulate that ONVIF was already initialized
+        onvif_controller.cams["front_door"]["init"] = True
+        self.app = super().create_app(onvif=onvif_controller)
+        with TestClient(self.app) as client:
+            camera_name = "front_door"
+            response = client.get(f"/{camera_name}/ptz/info")
+            assert response.status_code == 200
+            response_json = response.json()
+            self.assertDictEqual(
+                {
+                    "name": "front_door",
+                    "features": [],
+                    "presets": [],
+                },
+                response_json,
+            )

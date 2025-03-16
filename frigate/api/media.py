@@ -128,8 +128,10 @@ async def camera_ptz_info(request: Request, camera_name: str):
 @router.get("/{camera_name}/latest.{extension}")
 def latest_frame(
     request: Request,
-    camera_name: str,
-    extension: Extension,
+    camera_name: str = Path(..., description="Name of the camera"),
+    extension: Extension = Path(
+        ..., description="File extension to use for the returned (latest) frame"
+    ),
     params: MediaLatestFrameQueryParams = Depends(),
 ):
     frame_processor: TrackedObjectProcessor = request.app.detected_frames_processor
