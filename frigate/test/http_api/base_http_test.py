@@ -10,10 +10,11 @@ from playhouse.sqlite_ext import SqliteExtDatabase
 from playhouse.sqliteq import SqliteQueueDatabase
 from pydantic import Json
 
+from frigate.api.auth import hash_password
 from frigate.api.fastapi_app import create_fastapi_app
 from frigate.config import FrigateConfig
 from frigate.const import BASE_DIR, CACHE_DIR
-from frigate.models import Event, Previews, Recordings, ReviewSegment
+from frigate.models import Event, Previews, Recordings, ReviewSegment, User
 from frigate.review.types import SeverityEnum
 from frigate.test.const import TEST_DB, TEST_DB_CLEANUPS
 
@@ -122,6 +123,24 @@ class BaseTestHttp(unittest.TestCase):
             stats,
             None,
         )
+
+    def insert_mock_user(
+        self,
+        username: str,
+    ) -> Event:
+        """Inserts a basic event model with a given id."""
+        password = "123456"
+        password_hash = hash_password(
+            password,
+            iterations=600000,
+        )
+
+        return User.insert(
+            username=username,
+            role="admin",
+            password_hash=password_hash,
+            notification_tokens=[],
+        ).execute()
 
     def insert_mock_event(
         self,

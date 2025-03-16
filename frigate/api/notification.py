@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from peewee import DoesNotExist
 from py_vapid import Vapid01, utils
 
+from frigate.api.defs.response.generic_response import GenericResponse
 from frigate.api.defs.tags import Tags
 from frigate.const import CONFIG_DIR
 from frigate.models import User
@@ -33,7 +34,10 @@ def get_vapid_pub_key(request: Request):
     return JSONResponse(content=utils.b64urlencode(raw_pub), status_code=200)
 
 
-@router.post("/notifications/register")
+@router.post(
+    "/notifications/register",
+    response_model=GenericResponse,
+)
 def register_notifications(request: Request, body: dict = None):
     if request.app.frigate_config.auth.enabled:
         # FIXME: For FastAPI the remote-user is not being populated
