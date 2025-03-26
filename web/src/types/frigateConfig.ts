@@ -333,6 +333,7 @@ export interface FrigateConfig {
 
   face_recognition: {
     enabled: boolean;
+    model_size: SearchModelSize;
     detection_threshold: number;
     recognition_threshold: number;
   };
@@ -391,6 +392,15 @@ export interface FrigateConfig {
     colormap: { [key: string]: [number, number, number] };
     attributes_map: { [key: string]: [string] };
     all_attributes: [string];
+    plus?: {
+      name: string;
+      id: string;
+      trainDate: string;
+      baseModel: string;
+      supportedDetectors: string[];
+      width: number;
+      height: number;
+    };
   };
 
   motion: Record<string, unknown> | null;

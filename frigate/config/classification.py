@@ -1,11 +1,13 @@
 from enum import Enum
 from typing import Dict, List, Optional
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from .base import FrigateBaseModel
 
 __all__ = [
+    "CameraFaceRecognitionConfig",
+    "CameraLicensePlateRecognitionConfig",
     "FaceRecognitionConfig",
     "SemanticSearchConfig",
     "LicensePlateRecognitionConfig",
@@ -49,6 +51,9 @@ class SemanticSearchConfig(FrigateBaseModel):
 
 class FaceRecognitionConfig(FrigateBaseModel):
     enabled: bool = Field(default=False, title="Enable face recognition.")
+    model_size: str = Field(
+        default="small", title="The size of the embeddings model used."
+    )
     min_score: float = Field(
         title="Minimum face distance score required to save the attempt.",
         default=0.8,
@@ -70,12 +75,21 @@ class FaceRecognitionConfig(FrigateBaseModel):
     min_area: int = Field(
         default=500, title="Min area of face box to consider running face recognition."
     )
-    save_attempts: bool = Field(
-        default=True, title="Save images of face detections for training."
+    save_attempts: int = Field(
+        default=100, ge=0, title="Number of face attempts to save in the train tab."
     )
     blur_confidence_filter: bool = Field(
         default=True, title="Apply blur quality filter to face confidence."
     )
+
+
+class CameraFaceRecognitionConfig(FrigateBaseModel):
+    enabled: bool = Field(default=False, title="Enable face recognition.")
+    min_area: int = Field(
+        default=500, title="Min area of face box to consider running face recognition."
+    )
+
+    model_config = ConfigDict(extra="ignore", protected_namespaces=())
 
 
 class LicensePlateRecognitionConfig(FrigateBaseModel):
@@ -112,3 +126,18 @@ class LicensePlateRecognitionConfig(FrigateBaseModel):
     known_plates: Optional[Dict[str, List[str]]] = Field(
         default={}, title="Known plates to track (strings or regular expressions)."
     )
+
+
+class CameraLicensePlateRecognitionConfig(FrigateBaseModel):
+    enabled: bool = Field(default=False, title="Enable license plate recognition.")
+    expire_time: int = Field(
+        default=3,
+        title="Expire plates not seen after number of seconds (for dedicated LPR cameras only).",
+        gt=0,
+    )
+    min_area: int = Field(
+        default=1000,
+        title="Minimum area of license plate to begin running recognition.",
+    )
+
+    model_config = ConfigDict(extra="ignore", protected_namespaces=())
