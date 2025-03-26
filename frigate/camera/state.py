@@ -306,7 +306,6 @@ class CameraState:
         # TODO: can i switch to looking this up and only changing when an event ends?
         # maintain best objects
         camera_activity: dict[str, list[any]] = {
-            "enabled": True,
             "motion": len(motion_boxes) > 0,
             "objects": [],
         }
@@ -410,9 +409,13 @@ class CameraState:
             self.previous_frame_id = frame_name
 
     def save_manual_event_image(
-        self, event_id: str, label: str, draw: dict[str, list[dict]]
+        self,
+        frame: np.ndarray | None,
+        event_id: str,
+        label: str,
+        draw: dict[str, list[dict]],
     ) -> None:
-        img_frame = self.get_current_frame()
+        img_frame = frame if frame is not None else self.get_current_frame()
 
         # write clean snapshot if enabled
         if self.camera_config.snapshots.clean_copy:
@@ -458,9 +461,9 @@ class CameraState:
         # create thumbnail with max height of 175 and save
         width = int(175 * img_frame.shape[1] / img_frame.shape[0])
         thumb = cv2.resize(img_frame, dsize=(width, 175), interpolation=cv2.INTER_AREA)
-        cv2.imwrite(
-            os.path.join(THUMB_DIR, self.camera_config.name, f"{event_id}.webp"), thumb
-        )
+        thumb_path = os.path.join(THUMB_DIR, self.camera_config.name)
+        os.makedirs(thumb_path, exist_ok=True)
+        cv2.imwrite(os.path.join(thumb_path, f"{event_id}.webp"), thumb)
 
     def shutdown(self) -> None:
         for obj in self.tracked_objects.values():

@@ -20,6 +20,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { Trans, useTranslation } from "react-i18next";
 
 type ClassificationSettings = {
   search: {
@@ -29,6 +30,7 @@ type ClassificationSettings = {
   };
   face: {
     enabled?: boolean;
+    model_size?: SearchModelSize;
   };
   lpr: {
     enabled?: boolean;
@@ -41,6 +43,7 @@ type ClassificationSettingsViewProps = {
 export default function ClassificationSettingsView({
   setUnsavedChanges,
 }: ClassificationSettingsViewProps) {
+  const { t } = useTranslation("views/settings");
   const { data: config, mutate: updateConfig } =
     useSWR<FrigateConfig>("config");
   const [changedValue, setChangedValue] = useState(false);
@@ -57,6 +60,7 @@ export default function ClassificationSettingsView({
       },
       face: {
         enabled: undefined,
+        model_size: undefined,
       },
       lpr: {
         enabled: undefined,
@@ -72,6 +76,7 @@ export default function ClassificationSettingsView({
       },
       face: {
         enabled: undefined,
+        model_size: undefined,
       },
       lpr: {
         enabled: undefined,
@@ -89,6 +94,7 @@ export default function ClassificationSettingsView({
           },
           face: {
             enabled: config.face_recognition.enabled,
+            model_size: config.face_recognition.model_size,
           },
           lpr: {
             enabled: config.lpr.enabled,
@@ -104,6 +110,7 @@ export default function ClassificationSettingsView({
         },
         face: {
           enabled: config.face_recognition.enabled,
+          model_size: config.face_recognition.model_size,
         },
         lpr: {
           enabled: config.lpr.enabled,
@@ -134,22 +141,25 @@ export default function ClassificationSettingsView({
 
     axios
       .put(
-        `config/set?semantic_search.enabled=${classificationSettings.search.enabled ? "True" : "False"}&semantic_search.reindex=${classificationSettings.search.reindex ? "True" : "False"}&semantic_search.model_size=${classificationSettings.search.model_size}`,
+        `config/set?semantic_search.enabled=${classificationSettings.search.enabled ? "True" : "False"}&semantic_search.reindex=${classificationSettings.search.reindex ? "True" : "False"}&semantic_search.model_size=${classificationSettings.search.model_size}&face_recognition.enabled=${classificationSettings.face.enabled ? "True" : "False"}&face_recognition.model_size=${classificationSettings.face.model_size}&lpr.enabled=${classificationSettings.lpr.enabled ? "True" : "False"}`,
         {
           requires_restart: 0,
         },
       )
       .then((res) => {
         if (res.status === 200) {
-          toast.success("Classification settings have been saved.", {
+          toast.success(t("classification.toast.success"), {
             position: "top-center",
           });
           setChangedValue(false);
           updateConfig();
         } else {
-          toast.error(`Failed to save config changes: ${res.statusText}`, {
-            position: "top-center",
-          });
+          toast.error(
+            t("classification.toast.error", { errorMessage: res.statusText }),
+            {
+              position: "top-center",
+            },
+          );
         }
       })
       .catch((error) => {
@@ -157,14 +167,23 @@ export default function ClassificationSettingsView({
           error.response?.data?.message ||
           error.response?.data?.detail ||
           "Unknown error";
-        toast.error(`Failed to save config changes: ${errorMessage}`, {
-          position: "top-center",
-        });
+        toast.error(
+          t("toast.save.error.title", { errorMessage, ns: "common" }),
+          {
+            position: "top-center",
+          },
+        );
       })
       .finally(() => {
+        addMessage(
+          "search_settings",
+          `Restart Required (Classification settings changed)`,
+          undefined,
+          "search_settings",
+        );
         setIsLoading(false);
       });
-  }, [updateConfig, classificationSettings.search]);
+  }, [classificationSettings, t, addMessage, updateConfig]);
 
   const onCancel = useCallback(() => {
     setClassificationSettings(origSearchSettings);
@@ -188,8 +207,8 @@ export default function ClassificationSettingsView({
   }, [changedValue]);
 
   useEffect(() => {
-    document.title = "Classification Settings - Frigate";
-  }, []);
+    document.title = t("documentTitle.classification");
+  }, [t]);
 
   if (!config) {
     return <ActivityIndicator />;
@@ -200,19 +219,15 @@ export default function ClassificationSettingsView({
       <Toaster position="top-center" closeButton={true} />
       <div className="scrollbar-container order-last mb-10 mt-2 flex h-full w-full flex-col overflow-y-auto rounded-lg border-[1px] border-secondary-foreground bg-background_alt p-2 md:order-none md:mb-0 md:mr-2 md:mt-0">
         <Heading as="h3" className="my-2">
-          Classification Settings
+          {t("classification.title")}
         </Heading>
         <Separator className="my-2 flex bg-secondary" />
         <Heading as="h4" className="my-2">
-          Semantic Search
+          {t("classification.semanticSearch.title")}
         </Heading>
         <div className="max-w-6xl">
           <div className="mb-5 mt-2 flex max-w-5xl flex-col gap-2 text-sm text-primary-variant">
-            <p>
-              Semantic Search in Frigate allows you to find tracked objects
-              within your review items using either the image itself, a
-              user-defined text description, or an automatically generated one.
-            </p>
+            <p>{t("classification.semanticSearch.desc")}</p>
 
             <div className="flex items-center text-primary">
               <Link
@@ -221,7 +236,7 @@ export default function ClassificationSettingsView({
                 rel="noopener noreferrer"
                 className="inline"
               >
-                Read the Documentation
+                {t("classification.semanticSearch.readTheDocumentation")}
                 <LuExternalLink className="ml-2 inline-flex size-3" />
               </Link>
             </div>
@@ -242,7 +257,9 @@ export default function ClassificationSettingsView({
               }}
             />
             <div className="space-y-0.5">
-              <Label htmlFor="enabled">Enabled</Label>
+              <Label htmlFor="enabled">
+                {t("button.enabled", { ns: "common" })}
+              </Label>
             </div>
           </div>
           <div className="flex flex-col">
@@ -259,31 +276,38 @@ export default function ClassificationSettingsView({
                 }}
               />
               <div className="space-y-0.5">
-                <Label htmlFor="reindex">Re-Index On Startup</Label>
+                <Label htmlFor="reindex">
+                  {t("classification.semanticSearch.reindexOnStartup.label")}
+                </Label>
               </div>
             </div>
             <div className="mt-3 text-sm text-muted-foreground">
-              Re-indexing will reprocess all thumbnails and descriptions (if
-              enabled) and apply the embeddings on each startup.{" "}
-              <em>Don't forget to disable the option after restarting!</em>
+              <Trans ns="views/settings">
+                classification.semanticSearch.reindexOnStartup.desc
+              </Trans>
             </div>
           </div>
           <div className="mt-2 flex flex-col space-y-6">
             <div className="space-y-0.5">
-              <div className="text-md">Model Size</div>
+              <div className="text-md">
+                {t("classification.semanticSearch.modelSize.label")}
+              </div>
               <div className="space-y-1 text-sm text-muted-foreground">
                 <p>
-                  The size of the model used for Semantic Search embeddings.
+                  <Trans ns="views/settings">
+                    classification.semanticSearch.modelSize.desc
+                  </Trans>
                 </p>
                 <ul className="list-disc pl-5 text-sm">
                   <li>
-                    Using <em>small</em> employs a quantized version of the
-                    model that uses less RAM and runs faster on CPU with a very
-                    negligible difference in embedding quality.
+                    <Trans ns="views/settings">
+                      classification.semanticSearch.modelSize.small.desc
+                    </Trans>
                   </li>
                   <li>
-                    Using <em>large</em> employs the full Jina model and will
-                    automatically run on the GPU if applicable.
+                    <Trans ns="views/settings">
+                      classification.semanticSearch.modelSize.large.desc
+                    </Trans>
                   </li>
                 </ul>
               </div>
@@ -309,7 +333,11 @@ export default function ClassificationSettingsView({
                       className="cursor-pointer"
                       value={size}
                     >
-                      {size}
+                      {t(
+                        "classification.semanticSearch.modelSize." +
+                          size +
+                          ".title",
+                      )}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -322,16 +350,11 @@ export default function ClassificationSettingsView({
           <Separator className="my-2 flex bg-secondary" />
 
           <Heading as="h4" className="my-2">
-            Face Recognition
+            {t("classification.faceRecognition.title")}
           </Heading>
           <div className="max-w-6xl">
             <div className="mb-5 mt-2 flex max-w-5xl flex-col gap-2 text-sm text-primary-variant">
-              <p>
-                Face recognition allows people to be assigned names and when
-                their face is recognized Frigate will assign the person's name
-                as a sub label. This information is included in the UI, filters,
-                as well as in notifications.
-              </p>
+              <p>{t("classification.faceRecognition.desc")}</p>
 
               <div className="flex items-center text-primary">
                 <Link
@@ -340,7 +363,7 @@ export default function ClassificationSettingsView({
                   rel="noopener noreferrer"
                   className="inline"
                 >
-                  Read the Documentation
+                  {t("classification.faceRecognition.readTheDocumentation")}
                   <LuExternalLink className="ml-2 inline-flex size-3" />
                 </Link>
               </div>
@@ -361,26 +384,76 @@ export default function ClassificationSettingsView({
                 }}
               />
               <div className="space-y-0.5">
-                <Label htmlFor="enabled">Enabled</Label>
+                <Label htmlFor="enabled">
+                  {t("button.enabled", { ns: "common" })}
+                </Label>
               </div>
             </div>
+            <div className="space-y-0.5">
+              <div className="text-md">
+                {t("classification.faceRecognition.modelSize.label")}
+              </div>
+              <div className="space-y-1 text-sm text-muted-foreground">
+                <p>
+                  <Trans ns="views/settings">
+                    classification.faceRecognition.modelSize.desc
+                  </Trans>
+                </p>
+                <ul className="list-disc pl-5 text-sm">
+                  <li>
+                    <Trans ns="views/settings">
+                      classification.faceRecognition.modelSize.small.desc
+                    </Trans>
+                  </li>
+                  <li>
+                    <Trans ns="views/settings">
+                      classification.faceRecognition.modelSize.large.desc
+                    </Trans>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <Select
+              value={classificationSettings.face.model_size}
+              onValueChange={(value) =>
+                handleClassificationConfigChange({
+                  face: {
+                    model_size: value as SearchModelSize,
+                  },
+                })
+              }
+            >
+              <SelectTrigger className="w-20">
+                {classificationSettings.search.model_size}
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {["small", "large"].map((size) => (
+                    <SelectItem
+                      key={size}
+                      className="cursor-pointer"
+                      value={size}
+                    >
+                      {t(
+                        "classification.faceRecognition.modelSize." +
+                          size +
+                          ".title",
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </div>
 
           <Separator className="my-2 flex bg-secondary" />
 
           <Heading as="h4" className="my-2">
-            License Plate Recognition
+            {t("classification.licensePlateRecognition.title")}
           </Heading>
           <div className="max-w-6xl">
             <div className="mb-5 mt-2 flex max-w-5xl flex-col gap-2 text-sm text-primary-variant">
-              <p>
-                Frigate can recognize license plates on vehicles and
-                automatically add the detected characters to the
-                recognized_license_plate field or a known name as a sub_label to
-                objects that are of type car. A common use case may be to read
-                the license plates of cars pulling into a driveway or cars
-                passing by on a street.
-              </p>
+              <p>{t("classification.licensePlateRecognition.desc")}</p>
 
               <div className="flex items-center text-primary">
                 <Link
@@ -389,7 +462,9 @@ export default function ClassificationSettingsView({
                   rel="noopener noreferrer"
                   className="inline"
                 >
-                  Read the Documentation
+                  {t(
+                    "classification.licensePlateRecognition.readTheDocumentation",
+                  )}
                   <LuExternalLink className="ml-2 inline-flex size-3" />
                 </Link>
               </div>
@@ -410,7 +485,9 @@ export default function ClassificationSettingsView({
                 }}
               />
               <div className="space-y-0.5">
-                <Label htmlFor="enabled">Enabled</Label>
+                <Label htmlFor="enabled">
+                  {t("button.enabled", { ns: "common" })}
+                </Label>
               </div>
             </div>
           </div>
@@ -420,10 +497,10 @@ export default function ClassificationSettingsView({
           <div className="flex w-full flex-row items-center gap-2 pt-2 md:w-[25%]">
             <Button
               className="flex flex-1"
-              aria-label="Reset"
+              aria-label={t("button.reset", { ns: "common" })}
               onClick={onCancel}
             >
-              Reset
+              {t("button.reset", { ns: "common" })}
             </Button>
             <Button
               variant="select"
@@ -435,10 +512,10 @@ export default function ClassificationSettingsView({
               {isLoading ? (
                 <div className="flex flex-row items-center gap-2">
                   <ActivityIndicator />
-                  <span>Saving...</span>
+                  <span>{t("button.saving", { ns: "common" })}</span>
                 </div>
               ) : (
-                "Save"
+                t("button.save", { ns: "common" })
               )}
             </Button>
           </div>

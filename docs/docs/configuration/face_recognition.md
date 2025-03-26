@@ -7,7 +7,7 @@ Face recognition identifies known individuals by matching detected faces with pr
 
 ## Model Requirements
 
-Frigate has support for CV2 Local Binary Pattern Face Recognizer to recognize faces, which runs locally. A lightweight face landmark detection model is also used to align faces before running them through the face recognizer.
+### Face Detection
 
 Users running a Frigate+ model (or any custom model that natively detects faces) should ensure that `face` is added to the [list of objects to track](../plus/#available-label-types) either globally or for a specific camera. This will allow face detection to run at the same time as object detection and be more efficient.
 
@@ -19,9 +19,19 @@ Frigate needs to first detect a `face` before it can recognize a face.
 
 :::
 
+### Face Recognition
+
+Frigate has support for two face recognition model types:
+- **small**: Frigate will use CV2 Local Binary Pattern Face Recognizer to recognize faces, which runs locally on the CPU.
+- **large**: Frigate will run a face embedding model, this is only recommended to be run when an integrated or dedicated GPU is available.
+
+In both cases a lightweight face landmark detection model is also used to align faces before running them through the face recognizer.
+
 ## Minimum System Requirements
 
-Face recognition is lightweight and runs on the CPU, there are no significantly different system requirements than running Frigate itself.
+Face recognition is lightweight and runs on the CPU, there are no significantly different system requirements than running Frigate itself when using the `small` model.
+
+When using the `large` model an integrated or discrete GPU is recommended.
 
 ## Configuration
 
@@ -47,6 +57,7 @@ Fine-tune face recognition with these optional parameters:
 
 ### Recognition
 
+- `model_size`: Which model size to use, options are `small` or `large`
 - `recognition_threshold`: Recognition confidence score required to add the face to the object as a sub label.
   - Default: `0.9`.
 - `blur_confidence_filter`: Enables a filter that calculates how blurry the face is and adjusts the confidence based on this.
@@ -74,19 +85,40 @@ The accuracy of face recognition is heavily dependent on the quality of data giv
 When choosing images to include in the face training set it is recommended to always follow these recommendations:
 
 - If it is difficult to make out details in a persons face it will not be helpful in training.
-- Avoid images with under/over-exposure.
+- Avoid images with extreme under/over-exposure.
 - Avoid blurry / pixelated images.
-- Be careful when uploading images of people when they are wearing clothing that covers a lot of their face as this may confuse the training.
-- Do not upload too many images at the same time, it is recommended to train 4-6 images for each person each day so it is easier to know if the previously added images helped or hurt performance.
+- Be careful when uploading images of people when they are wearing clothing that covers a lot of their face as this may confuse the model.
+- Do not upload too many similar images at the same time, it is recommended to train no more than 4-6 similar images for each person to avoid overfitting.
 
 :::
 
 ### Step 1 - Building a Strong Foundation
 
-When first enabling face recognition it is important to build a foundation of strong images. It is recommended to start by uploading 1-2 photos taken by a smartphone for each person. It is important that the person's face in the photo is straight-on and not turned which will ensure a good starting point.
+When first enabling face recognition it is important to build a foundation of strong images. It is recommended to start by uploading 1-5 "portrait" photos for each person. It is important that the person's face in the photo is straight-on and not turned which will ensure a good starting point.
 
-Then it is recommended to use the `Face Library` tab in Frigate to select and train images for each person as they are detected. When building a strong foundation it is strongly recommended to only train on images that are straight-on. Ignore images from cameras that recognize faces from an angle. Once a person starts to be consistently recognized correctly on images that are straight-on, it is time to move on to the next step.
+Then it is recommended to use the `Face Library` tab in Frigate to select and train images for each person as they are detected. When building a strong foundation it is strongly recommended to only train on images that are straight-on. Ignore images from cameras that recognize faces from an angle.
+
+Aim to strike a balance between the quality of images while also having a range of conditions (day / night, different weather conditions, different times of day, etc.) in order to have diversity in the images used for each person and not have overfitting.
+
+Once a person starts to be consistently recognized correctly on images that are straight-on, it is time to move on to the next step.
 
 ### Step 2 - Expanding The Dataset
 
 Once straight-on images are performing well, start choosing slightly off-angle images to include for training. It is important to still choose images where enough face detail is visible to recognize someone.
+
+## FAQ
+
+### Why is every face tagged as a known face and not unknown?
+
+Any recognized face with a score >= `min_score` will show in the `Train` tab along with the recognition score. A low scoring face is effectively the same as `unknown`, but includes more information. This does not mean the recognition is not working well, and is part of the importance of choosing the correct `recognition_threshold`.
+
+### Why do unknown people score similarly to known people?
+
+This can happen for a few different reasons, but this is usually an indicator that the training set needs to be improved. This is often related to overfitting:
+- If you train with only a few images per person, especially if those images are very similar, the recognition model becomes overly specialized to those specific images.
+- When you provide images with different poses, lighting, and expressions, the algorithm extracts features that are consistent across those variations.
+- By training on a diverse set of images, the algorithm becomes less sensitive to minor variations and noise in the input image.
+
+### I see scores above the threshold in the train tab, but a sub label wasn't assigned?
+
+The Frigate face recognizer collects face recognition scores from all of the frames across the person objects lifecycle. The scores are continually weighted based on the area of the face, and a sub label will only be assigned to person if there is a prominent person recognized. This avoids cases where a single high confidence recognition result would throw off the results.
