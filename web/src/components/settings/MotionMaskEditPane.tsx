@@ -23,6 +23,7 @@ import ActivityIndicator from "../indicators/activity-indicator";
 import { Link } from "react-router-dom";
 import { LuExternalLink } from "react-icons/lu";
 import { Trans, useTranslation } from "react-i18next";
+import { useDocDomain } from "@/hooks/use-doc-domain";
 
 type MotionMaskEditPaneProps = {
   polygons?: Polygon[];
@@ -52,6 +53,7 @@ export default function MotionMaskEditPane({
   setSnapPoints,
 }: MotionMaskEditPaneProps) {
   const { t } = useTranslation(["views/settings"]);
+  const { getLocaleDocUrl } = useDocDomain();
   const { data: config, mutate: updateConfig } =
     useSWR<FrigateConfig>("config");
 
@@ -161,6 +163,7 @@ export default function MotionMaskEditPane({
     axios
       .put(`config/set?${queryString}`, {
         requires_restart: 0,
+        update_topic: `config/cameras/${polygon.camera}/motion`,
       })
       .then((res) => {
         if (res.status === 200) {
@@ -242,17 +245,19 @@ export default function MotionMaskEditPane({
       </Heading>
       <div className="my-3 space-y-3 text-sm text-muted-foreground">
         <p>
-          <Trans ns="views/settings">masksAndZones.motionMasks.context</Trans>
+          <Trans ns="views/settings">
+            masksAndZones.motionMasks.context.title
+          </Trans>
         </p>
 
         <div className="flex items-center text-primary">
           <Link
-            to="https://docs.frigate.video/configuration/masks/"
+            to={getLocaleDocUrl("configuration/masks/")}
             target="_blank"
             rel="noopener noreferrer"
             className="inline"
           >
-            {t("masksAndZones.motionMasks.context.documentation")}{" "}
+            {t("readTheDocumentation", { ns: "common" })}
             <LuExternalLink className="ml-2 inline-flex size-3" />
           </Link>
         </div>
@@ -298,7 +303,7 @@ export default function MotionMaskEditPane({
               rel="noopener noreferrer"
               className="my-3 block"
             >
-              {t("masksAndZones.motionMasks.polygonAreaTooLarge.documentation")}{" "}
+              {t("readTheDocumentation", { ns: "common" })}{" "}
               <LuExternalLink className="ml-2 inline-flex size-3" />
             </Link>
           </div>

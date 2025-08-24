@@ -3,17 +3,18 @@
     "default": "Settings - Frigate",
     "authentication": "Authentication Settings - Frigate",
     "camera": "Camera Settings - Frigate",
-    "classification": "Classification Settings - Frigate",
+    "enrichments": "Enrichments Settings - Frigate",
     "masksAndZones": "Mask and Zone Editor - Frigate",
     "motionTuner": "Motion Tuner - Frigate",
-    "object": "Object Settings - Frigate",
+    "object": "Debug - Frigate",
     "general": "General Settings - Frigate",
-    "frigatePlus": "Frigate+ Settings - Frigate"
+    "frigatePlus": "Frigate+ Settings - Frigate",
+    "notifications": "Notification Settings - Frigate"
   },
   "menu": {
-    "uiSettings": "UI Settings",
-    "classificationSettings": "Classification Settings",
-    "cameraSettings": "Camera Settings",
+    "ui": "UI",
+    "enrichments": "Enrichments",
+    "cameras": "Camera Settings",
     "masksAndZones": "Masks / Zones",
     "motionTuner": "Motion Tuner",
     "debug": "Debug",
@@ -81,15 +82,25 @@
       }
     }
   },
-  "classification": {
-    "title": "Classification Settings",
+  "enrichments": {
+    "title": "Enrichments Settings",
+    "unsavedChanges": "Unsaved Enrichments settings changes",
+    "birdClassification": {
+      "title": "Bird Classification",
+      "desc": "Bird classification identifies known birds using a quantized Tensorflow model. When a known bird is recognized, its common name will be added as a sub_label. This information is included in the UI, filters, as well as in notifications."
+    },
     "semanticSearch": {
       "title": "Semantic Search",
       "desc": "Semantic Search in Frigate allows you to find tracked objects within your review items using either the image itself, a user-defined text description, or an automatically generated one.",
-      "readTheDocumentation": "Read the Documentation",
-      "reindexOnStartup": {
-        "label": "Re-Index On Startup",
-        "desc": "Re-indexing will reprocess all thumbnails and descriptions (if enabled) and apply the embeddings on each startup. <em>Don't forget to disable the option after restarting!</em>"
+      "reindexNow": {
+        "label": "Reindex Now",
+        "desc": "Reindexing will regenerate embeddings for all tracked object. This process runs in the background and may max out your CPU and take a fair amount of time depending on the number of tracked objects you have.",
+        "confirmTitle": "Confirm Reindexing",
+        "confirmDesc": "Are you sure you want to reindex all tracked object embeddings? This process will run in the background but it may max out your CPU and take a fair amount of time. You can watch the progress on the Explore page.",
+        "confirmButton": "Reindex",
+        "success": "Reindexing started successfully.",
+        "alreadyInProgress": "Reindexing is already in progress.",
+        "error": "Failed to start reindexing: {{errorMessage}}"
       },
       "modelSize": {
         "label": "Model Size",
@@ -107,27 +118,26 @@
     "faceRecognition": {
       "title": "Face Recognition",
       "desc": "Face recognition allows people to be assigned names and when their face is recognized Frigate will assign the person's name as a sub label. This information is included in the UI, filters, as well as in notifications.",
-      "readTheDocumentation": "Read the Documentation",
       "modelSize": {
         "label": "Model Size",
         "desc": "The size of the model used for face recognition.",
         "small": {
           "title": "small",
-          "desc": "Using <em>small</em> employs a Local Binary Pattern Histogram model via OpenCV that runs efficiently on most CPUs."
+          "desc": "Using <em>small</em> employs a FaceNet face embedding model that runs efficiently on most CPUs."
         },
         "large": {
           "title": "large",
-          "desc": "Using <em>large</em> employs an ArcFace Face embedding model and will automatically run on the GPU if applicable."
+          "desc": "Using <em>large</em> employs an ArcFace face embedding model and will automatically run on the GPU if applicable."
         }
       }
     },
     "licensePlateRecognition": {
       "title": "License Plate Recognition",
-      "desc": "Frigate can recognize license plates on vehicles and automatically add the detected characters to the recognized_license_plate field or a known name as a sub_label to objects that are of type car. A common use case may be to read the license plates of cars pulling into a driveway or cars passing by on a street.",
-      "readTheDocumentation": "Read the Documentation"
+      "desc": "Frigate can recognize license plates on vehicles and automatically add the detected characters to the recognized_license_plate field or a known name as a sub_label to objects that are of type car. A common use case may be to read the license plates of cars pulling into a driveway or cars passing by on a street."
     },
+    "restart_required": "Restart required (Enrichments settings changed)",
     "toast": {
-      "success": "Classification settings have been saved. Restart Frigate to apply your changes.",
+      "success": "Enrichments settings have been saved. Restart Frigate to apply your changes.",
       "error": "Failed to save config changes: {{errorMessage}}"
     }
   },
@@ -135,18 +145,26 @@
     "title": "Camera Settings",
     "streams": {
       "title": "Streams",
-      "desc": "Disabling a camera completely stops Frigate's processing of this camera's streams. Detection, recording, and debugging will be unavailable.<br /> <em>Note: This does not disable go2rtc restreams.</em>"
+      "desc": "Temporarily disable a camera until Frigate restarts. Disabling a camera completely stops Frigate's processing of this camera's streams. Detection, recording, and debugging will be unavailable.<br /> <em>Note: This does not disable go2rtc restreams.</em>"
+    },
+    "object_descriptions": {
+      "title": "Generative AI Object Descriptions",
+      "desc": "Temporarily enable/disable Generative AI object descriptions for this camera. When disabled, AI generated descriptions will not be requested for tracked objects on this camera."
+    },
+    "review_descriptions": {
+      "title": "Generative AI Review Descriptions",
+      "desc": "Temporarily enable/disable Generative AI review descriptions for this camera. When disabled, AI generated descriptions will not be requested for review items on this camera."
     },
     "review": {
       "title": "Review",
-      "desc": "Enable/disable alerts and detections for this camera. When disabled, no new review items will be generated.",
+      "desc": "Temporarily enable/disable alerts and detections for this camera until Frigate restarts. When disabled, no new review items will be generated. ",
       "alerts": "Alerts ",
       "detections": "Detections "
     },
     "reviewClassification": {
       "title": "Review Classification",
       "desc": "Frigate categorizes review items as Alerts and Detections. By default, all <em>person</em> and <em>car</em> objects are considered Alerts. You can refine categorization of your review items by configuring required zones for them.",
-      "readTheDocumentation": "Read the Documentation",
+
       "noDefinedZones": "No zones are defined for this camera.",
       "objectAlertsTips": "All {{alertsLabels}} objects on {{cameraName}} will be shown as Alerts.",
       "zoneObjectAlertsTips": "All {{alertsLabels}} objects detected in {{zone}} on {{cameraName}} will be shown as Alerts.",
@@ -156,11 +174,41 @@
         "notSelectDetections": "All {{detectionsLabels}} objects detected in {{zone}} on {{cameraName}} not categorized as Alerts will be shown as Detections regardless of which zone they are in.",
         "regardlessOfZoneObjectDetectionsTips": "All {{detectionsLabels}} objects not categorized on {{cameraName}} will be shown as Detections regardless of which zone they are in."
       },
+      "unsavedChanges": "Unsaved Review Classification settings for {{camera}}",
       "selectAlertsZones": "Select zones for Alerts",
       "selectDetectionsZones": "Select zones for Detections",
       "limitDetections": "Limit detections to specific zones",
       "toast": {
-        "success": "Review classification configuration has been saved. Restart Frigate to apply changes."
+        "success": "Review Classification configuration has been saved. Restart Frigate to apply changes."
+      }
+    },
+    "addCamera": "Add New Camera",
+    "editCamera": "Edit Camera:",
+    "selectCamera": "Select a Camera",
+    "backToSettings": "Back to Camera Settings",
+    "cameraConfig": {
+      "add": "Add Camera",
+      "edit": "Edit Camera",
+      "description": "Configure camera settings including stream inputs and roles.",
+      "name": "Camera Name",
+      "nameRequired": "Camera name is required",
+      "nameInvalid": "Camera name must contain only letters, numbers, underscores, or hyphens",
+      "namePlaceholder": "e.g., front_door",
+      "enabled": "Enabled",
+      "ffmpeg": {
+        "inputs": "Input Streams",
+        "path": "Stream Path",
+        "pathRequired": "Stream path is required",
+        "pathPlaceholder": "rtsp://...",
+        "roles": "Roles",
+        "rolesRequired": "At least one role is required",
+        "rolesUnique": "Each role (audio, detect, record) can only be assigned to one stream",
+        "addInput": "Add Input Stream",
+        "removeInput": "Remove Input Stream",
+        "inputsRequired": "At least one input stream is required"
+      },
+      "toast": {
+        "success": "Camera {{cameraName}} saved successfully"
       }
     }
   },
@@ -168,6 +216,7 @@
     "filter": {
       "all": "All Masks and Zones"
     },
+    "restart_required": "Restart required (masks/zones changed)",
     "toast": {
       "success": {
         "copyCoordinates": "Copied coordinates for {{polyName}} to clipboard."
@@ -176,6 +225,8 @@
         "copyCoordinatesFailed": "Could not copy coordinates to clipboard."
       }
     },
+    "motionMaskLabel": "Motion Mask {{number}}",
+    "objectMaskLabel": "Object Mask {{number}} ({{label}})",
     "form": {
       "zoneName": {
         "error": {
@@ -200,6 +251,11 @@
       "loiteringTime": {
         "error": {
           "mustBeGreaterOrEqualZero": "Loitering time must be greater than or equal to 0."
+        }
+      },
+      "speed": {
+        "error": {
+          "mustBeGreaterOrEqualTo": "Speed threshold must greater than or equal to 0.1."
         }
       },
       "polygonDrawing": {
@@ -235,7 +291,7 @@
       "clickDrawPolygon": "Click to draw a polygon on the image.",
       "name": {
         "title": "Name",
-        "inputPlaceHolder": "Enter a name...",
+        "inputPlaceHolder": "Enter a name…",
         "tips": "Name must be at least 2 characters and must not be the name of a camera or another zone."
       },
       "inertia": {
@@ -253,7 +309,11 @@
       "allObjects": "All Objects",
       "speedEstimation": {
         "title": "Speed Estimation",
-        "desc": "Enable speed estimation for objects in this zone. The zone must have exactly 4 points."
+        "desc": "Enable speed estimation for objects in this zone. The zone must have exactly 4 points.",
+        "lineADistance": "Line A distance ({{unit}})",
+        "lineBDistance": "Line B distance ({{unit}})",
+        "lineCDistance": "Line C distance ({{unit}})",
+        "lineDDistance": "Line D distance ({{unit}})"
       },
       "speedThreshold": {
         "title": "Speed Threshold ({{unit}})",
@@ -279,16 +339,14 @@
       "add": "New Motion Mask",
       "edit": "Edit Motion Mask",
       "context": {
-        "title": "Motion masks are used to prevent unwanted types of motion from triggering detection (example: tree branches, camera timestamps). Motion masks should be used <em>very sparingly</em>, over-masking will make it more difficult for objects to be tracked.",
-        "documentation": "Read the documentation"
+        "title": "Motion masks are used to prevent unwanted types of motion from triggering detection (example: tree branches, camera timestamps). Motion masks should be used <em>very sparingly</em>, over-masking will make it more difficult for objects to be tracked."
       },
       "point_one": "{{count}} point",
       "point_other": "{{count}} points",
       "clickDrawPolygon": "Click to draw a polygon on the image.",
       "polygonAreaTooLarge": {
         "title": "The motion mask is covering {{polygonArea}}% of the camera frame. Large motion masks are not recommended.",
-        "tips": "Motion masks do not prevent objects from being detected. You should use a required zone instead.",
-        "documentation": "Read the documentation"
+        "tips": "Motion masks do not prevent objects from being detected. You should use a required zone instead."
       },
       "toast": {
         "success": {
@@ -312,7 +370,7 @@
       "clickDrawPolygon": "Click to draw a polygon on the image.",
       "objects": {
         "title": "Objects",
-        "desc": "The object type that that applies to this object mask.",
+        "desc": "The object type that applies to this object mask.",
         "allObjectTypes": "All object types"
       },
       "toast": {
@@ -325,6 +383,7 @@
   },
   "motionDetectionTuner": {
     "title": "Motion Detection Tuner",
+    "unsavedChanges": "Unsaved Motion Tuner changes ({{camera}})",
     "desc": {
       "title": "Frigate uses motion detection as a first line check to see if there is anything happening in the frame worth checking with object detection.",
       "documentation": "Read the Motion Tuning Guide"
@@ -375,18 +434,22 @@
     "motion": {
       "title": "Motion boxes",
       "desc": "Show boxes around areas where motion is detected",
-      "tips": "<p className=\"mb-2\"><strong>Motion Boxes</strong></p><br><p>Red boxes will be overlaid on areas of the frame where motion is currently being detected</p>"
+      "tips": "<p><strong>Motion Boxes</strong></p><br><p>Red boxes will be overlaid on areas of the frame where motion is currently being detected</p>"
     },
     "regions": {
       "title": "Regions",
       "desc": "Show a box of the region of interest sent to the object detector",
-      "tips": "<p className=\"mb-2\"><strong>Region Boxes</strong></p><br><p>Bright green boxes will be overlaid on areas of interest in the frame that are being sent to the object detector.</p>"
+      "tips": "<p><strong>Region Boxes</strong></p><br><p>Bright green boxes will be overlaid on areas of interest in the frame that are being sent to the object detector.</p>"
+    },
+    "paths": {
+      "title": "Paths",
+      "desc": "Show significant points of the tracked object's path",
+      "tips": "<p><strong>Paths</strong></p><br><p>Lines and circles will indicate significant points the tracked object has moved during its lifecycle.</p>"
     },
     "objectShapeFilterDrawing": {
       "title": "Object Shape Filter Drawing",
       "desc": "Draw a rectangle on the image to view area and ratio details",
       "tips": "Enable this option to draw a rectangle on the camera image to show its area and ratio. These values can then be used to set object shape filter parameters in your config.",
-      "document": "Read the documentation ",
       "score": "Score",
       "ratio": "Ratio",
       "area": "Area"
@@ -454,27 +517,38 @@
             "placeholder": "Re-enter new password"
           }
         },
-        "usernameIsRequired": "Username is required"
+        "usernameIsRequired": "Username is required",
+        "passwordIsRequired": "Password is required"
       },
       "createUser": {
         "title": "Create New User",
         "desc": "Add a new user account and specify an role for access to areas of the Frigate UI.",
-        "usernameOnlyInclude": "Username may only include letters, numbers, . or _"
+        "usernameOnlyInclude": "Username may only include letters, numbers, . or _",
+        "confirmPassword": "Please confirm your password"
       },
       "deleteUser": {
         "title": "Delete User",
         "desc": "This action cannot be undone. This will permanently delete the user account and remove all associated data.",
-        "warn": "Are you sure you want to delete <span className=\"font-bold\">{{username}}</span>?"
+        "warn": "Are you sure you want to delete <strong>{{username}}</strong>?"
       },
       "passwordSetting": {
+        "cannotBeEmpty": "Password cannot be empty",
+        "doNotMatch": "Passwords do not match",
         "updatePassword": "Update Password for {{username}}",
         "setPassword": "Set Password",
         "desc": "Create a strong password to secure this account."
       },
       "changeRole": {
         "title": "Change User Role",
-        "desc": "Update permissions for <span className=\"font-medium\">{{username}}</span>",
-        "roleInfo": "<p>Select the appropriate role for this user:</p><ul className=\"mt-2 space-y-1 pl-5\"><li> • <span className=\"font-medium\">Admin:</span> Full access to all features. </li><li> • <span className=\"font-medium\">Viewer:</span> Limited to Live dashboards, Review, Explore, and Exports only.</li></ul>"
+        "select": "Select a role",
+        "desc": "Update permissions for <strong>{{username}}</strong>",
+        "roleInfo": {
+          "intro": "Select the appropriate role for this user:",
+          "admin": "Admin",
+          "adminDesc": "Full access to all features.",
+          "viewer": "Viewer",
+          "viewerDesc": "Limited to Live dashboards, Review, Explore, and Exports only."
+        }
       }
     }
   },
@@ -482,13 +556,11 @@
     "title": "Notifications",
     "notificationSettings": {
       "title": "Notification Settings",
-      "desc": "Frigate can natively send push notifications to your device when it is running in the browser or installed as a PWA.",
-      "documentation": "Read the Documentation"
+      "desc": "Frigate can natively send push notifications to your device when it is running in the browser or installed as a PWA."
     },
     "notificationUnavailable": {
       "title": "Notifications Unavailable",
-      "desc": "Web push notifications require a secure context (<code>https://...</code>). This is a browser limitation. Access Frigate securely to use notifications.",
-      "documentation": "Read the Documentation"
+      "desc": "Web push notifications require a secure context (<code>https://…</code>). This is a browser limitation. Access Frigate securely to use notifications."
     },
     "globalSettings": {
       "title": "Global Settings",
@@ -508,9 +580,12 @@
     "registerDevice": "Register This Device",
     "unregisterDevice": "Unregister This Device",
     "sendTestNotification": "Send a test notification",
+    "unsavedRegistrations": "Unsaved Notification registrations",
+    "unsavedChanges": "Unsaved Notification changes",
     "active": "Notifications Active",
     "suspended": "Notifications suspended {{time}}",
     "suspendTime": {
+      "suspend": "Suspend",
       "5minutes": "Suspend for 5 minutes",
       "10minutes": "Suspend for 10 minutes",
       "30minutes": "Suspend for 30 minutes",
@@ -542,7 +617,6 @@
     "snapshotConfig": {
       "title": "Snapshot Configuration",
       "desc": "Submitting to Frigate+ requires both snapshots and <code>clean_copy</code> snapshots to be enabled in your config.",
-      "documentation": "Read the documentation",
       "cleanCopyWarning": "Some cameras have snapshots enabled but have the clean copy disabled. You need to enable <code>clean_copy</code> in your snapshot config to be able to submit images from these cameras to Frigate+.",
       "table": {
         "camera": "Camera",
@@ -555,18 +629,118 @@
       "modelType": "Model Type",
       "trainDate": "Train Date",
       "baseModel": "Base Model",
+      "plusModelType": {
+        "baseModel": "Base Model",
+        "userModel": "Fine-Tuned"
+      },
       "supportedDetectors": "Supported Detectors",
-      "dimensions": "Dimensions",
       "cameras": "Cameras",
-      "loading": "Loading model information...",
+      "loading": "Loading model information…",
       "error": "Failed to load model information",
       "availableModels": "Available Models",
-      "loadingAvailableModels": "Loading available models...",
+      "loadingAvailableModels": "Loading available models…",
       "modelSelect": "Your available models on Frigate+ can be selected here. Note that only models compatible with your current detector configuration can be selected."
     },
+    "unsavedChanges": "Unsaved Frigate+ settings changes",
+    "restart_required": "Restart required (Frigate+ model changed)",
     "toast": {
       "success": "Frigate+ settings have been saved. Restart Frigate to apply changes.",
       "error": "Failed to save config changes: {{errorMessage}}"
+    }
+  },
+  "triggers": {
+    "documentTitle": "Triggers",
+    "management": {
+      "title": "Trigger Management",
+      "desc": "Manage triggers for {{camera}}. Use the thumbnail type to trigger on similar thumbnails to your selected tracked object, and the description type to trigger on similar descriptions to text you specify."
+    },
+    "addTrigger": "Add Trigger",
+    "table": {
+      "name": "Name",
+      "type": "Type",
+      "content": "Content",
+      "threshold": "Threshold",
+      "actions": "Actions",
+      "noTriggers": "No triggers configured for this camera.",
+      "edit": "Edit",
+      "deleteTrigger": "Delete Trigger",
+      "lastTriggered": "Last triggered"
+    },
+    "type": {
+      "thumbnail": "Thumbnail",
+      "description": "Description"
+    },
+    "actions": {
+      "alert": "Mark as Alert",
+      "notification": "Send Notification"
+    },
+    "dialog": {
+      "createTrigger": {
+        "title": "Create Trigger",
+        "desc": "Create a trigger for camera {{camera}}"
+      },
+      "editTrigger": {
+        "title": "Edit Trigger",
+        "desc": "Edit the settings for trigger on camera {{camera}}"
+      },
+      "deleteTrigger": {
+        "title": "Delete Trigger",
+        "desc": "Are you sure you want to delete the trigger <strong>{{triggerName}}</strong>? This action cannot be undone."
+      },
+      "form": {
+        "name": {
+          "title": "Name",
+          "placeholder": "Enter trigger name",
+          "error": {
+            "minLength": "Name must be at least 2 characters long.",
+            "invalidCharacters": "Name can only contain letters, numbers, underscores, and hyphens.",
+            "alreadyExists": "A trigger with this name already exists for this camera."
+          }
+        },
+        "enabled": {
+          "description": "Enable or disable this trigger"
+        },
+        "type": {
+          "title": "Type",
+          "placeholder": "Select trigger type"
+        },
+        "content": {
+          "title": "Content",
+          "imagePlaceholder": "Select an image",
+          "textPlaceholder": "Enter text content",
+          "imageDesc": "Select an image to trigger this action when a similar image is detected.",
+          "textDesc": "Enter text to trigger this action when a similar tracked object description is detected.",
+          "error": {
+            "required": "Content is required."
+          }
+        },
+        "threshold": {
+          "title": "Threshold",
+          "error": {
+            "min": "Threshold must be at least 0",
+            "max": "Threshold must be at most 1"
+          }
+        },
+        "actions": {
+          "title": "Actions",
+          "desc": "By default, Frigate fires an MQTT message for all triggers. Choose an additional action to perform when this trigger fires.",
+          "error": {
+            "min": "At least one action must be selected."
+          }
+        }
+      }
+    },
+    "toast": {
+      "success": {
+        "createTrigger": "Trigger {{name}} created successfully.",
+        "updateTrigger": "Trigger {{name}} updated successfully.",
+        "deleteTrigger": "Trigger {{name}} deleted successfully."
+      },
+      "error": {
+        "createTriggerFailed": "Failed to create trigger: {{errorMessage}}",
+        "updateTriggerFailed": "Failed to update trigger: {{errorMessage}}",
+        "deleteTriggerFailed": "Failed to delete trigger: {{errorMessage}}"
+      }
     }
   }
 }

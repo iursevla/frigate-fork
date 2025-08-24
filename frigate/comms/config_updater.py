@@ -1,8 +1,9 @@
 """Facilitates communication between processes."""
 
 import multiprocessing as mp
+from _pickle import UnpicklingError
 from multiprocessing.synchronize import Event as MpEvent
-from typing import Optional
+from typing import Any
 
 import zmq
 
@@ -18,7 +19,7 @@ class ConfigPublisher:
         self.socket.bind(SOCKET_PUB_SUB)
         self.stop_event: MpEvent = mp.Event()
 
-    def publish(self, topic: str, payload: any) -> None:
+    def publish(self, topic: str, payload: Any) -> None:
         """There is no communication back to the processes."""
         self.socket.send_string(topic, flags=zmq.SNDMORE)
         self.socket.send_pyobj(payload)
@@ -32,7 +33,7 @@ class ConfigPublisher:
 class ConfigSubscriber:
     """Simplifies receiving an updated config."""
 
-    def __init__(self, topic: str, exact=False) -> None:
+    def __init__(self, topic: str, exact: bool = False) -> None:
         self.topic = topic
         self.exact = exact
         self.context = zmq.Context()
@@ -40,7 +41,7 @@ class ConfigSubscriber:
         self.socket.setsockopt_string(zmq.SUBSCRIBE, topic)
         self.socket.connect(SOCKET_PUB_SUB)
 
-    def check_for_update(self) -> Optional[tuple[str, any]]:
+    def check_for_update(self) -> tuple[str, Any] | tuple[None, None]:
         """Returns updated config or None if no update."""
         try:
             topic = self.socket.recv_string(flags=zmq.NOBLOCK)
@@ -50,7 +51,7 @@ class ConfigSubscriber:
                 return (topic, obj)
             else:
                 return (None, None)
-        except zmq.ZMQError:
+        except (zmq.ZMQError, UnicodeDecodeError, UnpicklingError):
             return (None, None)
 
     def stop(self) -> None:

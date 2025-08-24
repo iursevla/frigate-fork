@@ -1,4 +1,5 @@
 import { IconName } from "@/components/icons/IconPicker";
+import { TriggerAction, TriggerType } from "./trigger";
 
 export interface UiConfig {
   timezone?: string;
@@ -20,6 +21,14 @@ export interface BirdseyeConfig {
   width: number;
 }
 
+export interface FaceRecognitionConfig {
+  enabled: boolean;
+  model_size: SearchModelSize;
+  unknown_score: number;
+  detection_threshold: number;
+  recognition_threshold: number;
+}
+
 export type SearchModel = "jinav1" | "jinav2";
 export type SearchModelSize = "small" | "large";
 
@@ -32,6 +41,11 @@ export interface CameraConfig {
     max_not_heard: number;
     min_volume: number;
     num_threads: number;
+  };
+  audio_transcription: {
+    enabled: boolean;
+    enabled_in_config: boolean;
+    live_enabled: boolean;
   };
   best_image_timeout: number;
   birdseye: {
@@ -80,13 +94,6 @@ export interface CameraConfig {
     cmd: string;
     roles: string[];
   }[];
-  genai: {
-    enabled: string;
-    prompt: string;
-    object_prompts: { [key: string]: string };
-    required_zones: string[];
-    objects: string[];
-  };
   live: {
     height: number;
     quality: number;
@@ -132,6 +139,14 @@ export interface CameraConfig {
     };
     mask: string;
     track: string[];
+    genai: {
+      enabled: boolean;
+      enabled_in_config: boolean;
+      prompt: string;
+      object_prompts: { [key: string]: string };
+      required_zones: string[];
+      objects: string[];
+    };
   };
   onvif: {
     autotracking: {
@@ -203,9 +218,26 @@ export interface CameraConfig {
         mode: string;
       };
     };
+    genai?: {
+      enabled: boolean;
+      enabled_in_config: boolean;
+      alerts: boolean;
+      detections: boolean;
+    };
   };
   rtmp: {
     enabled: boolean;
+  };
+  semantic_search: {
+    triggers: {
+      [triggerName: string]: {
+        enabled: boolean;
+        type: TriggerType;
+        data: string;
+        threshold: number;
+        actions: TriggerAction[];
+      };
+    };
   };
   snapshots: {
     bounding_box: boolean;
@@ -233,6 +265,7 @@ export interface CameraConfig {
     position: string;
     thickness: number;
   };
+  type: string;
   ui: UiConfig;
   webui_url: string | null;
   zones: {
@@ -265,6 +298,23 @@ export type CameraStreamingSettings = {
   volume: number;
 };
 
+export type CustomClassificationModelConfig = {
+  enabled: boolean;
+  name: string;
+  threshold: number;
+  object_config: null | {
+    objects: string[];
+  };
+  state_config: null | {
+    cameras: {
+      [cameraName: string]: {
+        crop: [number, number, number, number];
+      };
+    };
+    motion: boolean;
+  };
+};
+
 export type GroupStreamingSettings = {
   [cameraName: string]: CameraStreamingSettings;
 };
@@ -274,6 +324,9 @@ export type AllGroupsStreamingSettings = {
 };
 
 export interface FrigateConfig {
+  version: string;
+  safe_mode: boolean;
+
   audio: {
     enabled: boolean;
     enabled_in_config: boolean | null;
@@ -284,10 +337,24 @@ export interface FrigateConfig {
     num_threads: number;
   };
 
+  audio_transcription: {
+    enabled: boolean;
+  };
+
   birdseye: BirdseyeConfig;
 
   cameras: {
     [cameraName: string]: CameraConfig;
+  };
+
+  classification: {
+    bird: {
+      enabled: boolean;
+      threshold: number;
+    };
+    custom: {
+      [modelKey: string]: CustomClassificationModelConfig;
+    };
   };
 
   database: {
@@ -331,12 +398,7 @@ export interface FrigateConfig {
 
   environment_vars: Record<string, unknown>;
 
-  face_recognition: {
-    enabled: boolean;
-    model_size: SearchModelSize;
-    detection_threshold: number;
-    recognition_threshold: number;
-  };
+  face_recognition: FaceRecognitionConfig;
 
   ffmpeg: {
     global_args: string[];
@@ -351,15 +413,10 @@ export interface FrigateConfig {
   };
 
   genai: {
-    enabled: boolean;
     provider: string;
     base_url?: string;
     api_key?: string;
     model: string;
-    prompt: string;
-    object_prompts: { [key: string]: string };
-    required_zones: string[];
-    objects: string[];
   };
 
   go2rtc: {
@@ -397,6 +454,7 @@ export interface FrigateConfig {
       id: string;
       trainDate: string;
       baseModel: string;
+      isBaseModel: boolean;
       supportedDetectors: string[];
       width: number;
       height: number;

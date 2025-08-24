@@ -1,4 +1,7 @@
 /** @type {import('tailwindcss').Config} */
+
+const plugin = require("tailwindcss/plugin");
+
 module.exports = {
   darkMode: ["class"],
   content: [
@@ -38,6 +41,10 @@ module.exports = {
       aspectRatio: {
         wide: "32 / 9",
         tall: "8 / 9",
+      },
+      backgroundImage: {
+        slashes:
+          "repeating-linear-gradient(45deg, hsl(var(--primary-variant) / 0.2), hsl(var(--primary-variant) / 0.2) 2px, transparent 2px, transparent 8px)",
       },
       colors: {
         border: "hsl(var(--border))",
@@ -166,5 +173,16 @@ module.exports = {
     require("tailwindcss-animate"),
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     require("tailwind-scrollbar")({ nocompatible: true }),
+    plugin(function ({ addUtilities }) {
+      addUtilities({
+        ".smart-capitalize": {
+          ':root[lang="ru"] &, :root[lang="ar"] &, :root[lang="he"] &, :root[lang="zh"] &, :root[lang="ja"] &, :root[lang="ko"] &, :root[lang="hi"] &, :root[lang="th"] &':
+            {
+              textTransform: "none",
+            },
+          textTransform: "capitalize",
+        },
+      });
+    }),
   ],
 };

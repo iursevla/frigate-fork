@@ -2,6 +2,8 @@ from typing import List, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from frigate.config.classification import TriggerType
+
 
 class EventsSubLabelBody(BaseModel):
     subLabel: str = Field(title="Sub label", max_length=100)
@@ -10,6 +12,15 @@ class EventsSubLabelBody(BaseModel):
     )
     camera: Optional[str] = Field(
         title="Camera this object is detected on.", default=None
+    )
+
+
+class EventsLPRBody(BaseModel):
+    recognizedLicensePlate: str = Field(
+        title="Recognized License Plate", max_length=100
+    )
+    recognizedLicensePlateScore: Optional[float] = Field(
+        title="Score for recognized license plate", default=None, gt=0.0, le=1.0
     )
 
 
@@ -36,3 +47,9 @@ class EventsDeleteBody(BaseModel):
 
 class SubmitPlusBody(BaseModel):
     include_annotation: int = Field(default=1)
+
+
+class TriggerEmbeddingBody(BaseModel):
+    type: TriggerType
+    data: str
+    threshold: float = Field(default=0.5, ge=0.0, le=1.0)

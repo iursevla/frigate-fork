@@ -3,17 +3,15 @@ import os
 
 import numpy as np
 import openvino as ov
-import openvino.properties as props
 from pydantic import Field
 from typing_extensions import Literal
 
-from frigate.const import MODEL_CACHE_DIR
 from frigate.detectors.detection_api import DetectionApi
 from frigate.detectors.detector_config import BaseDetectorConfig, ModelTypeEnum
 from frigate.util.model import (
     post_process_dfine,
     post_process_rfdetr,
-    post_process_yolov9,
+    post_process_yolo,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,12 +31,12 @@ class OvDetector(DetectionApi):
         ModelTypeEnum.rfdetr,
         ModelTypeEnum.ssd,
         ModelTypeEnum.yolonas,
-        ModelTypeEnum.yolov9,
         ModelTypeEnum.yologeneric,
         ModelTypeEnum.yolox,
     ]
 
     def __init__(self, detector_config: OvDetectorConfig):
+        super().__init__(detector_config)
         self.ov_core = ov.Core()
         self.ov_model_type = detector_config.model.model_type
 
@@ -49,10 +47,6 @@ class OvDetector(DetectionApi):
             logger.error(f"OpenVino model file {detector_config.model.path} not found.")
             raise FileNotFoundError
 
-        os.makedirs(os.path.join(MODEL_CACHE_DIR, "openvino"), exist_ok=True)
-        self.ov_core.set_property(
-            {props.cache_dir: os.path.join(MODEL_CACHE_DIR, "openvino")}
-        )
         self.interpreter = self.ov_core.compile_model(
             model=detector_config.model.path, device_name=detector_config.device
         )
@@ -65,7 +59,6 @@ class OvDetector(DetectionApi):
             )
             self.model_invalid = True
 
-        # Ensure the SSD model has the right input and output shapes
         if self.ov_model_type == ModelTypeEnum.ssd:
             model_inputs = self.interpreter.inputs
             model_outputs = self.interpreter.outputs
@@ -78,12 +71,6 @@ class OvDetector(DetectionApi):
             if len(model_outputs) != 1:
                 logger.error(
                     f"SSD models must only have 1 output. Found {len(model_outputs)}."
-                )
-                self.model_invalid = True
-
-            if model_inputs[0].get_shape() != ov.Shape([1, self.w, self.h, 3]):
-                logger.error(
-                    f"SSD model input doesn't match. Found {model_inputs[0].get_shape()}."
                 )
                 self.model_invalid = True
 
@@ -106,13 +93,6 @@ class OvDetector(DetectionApi):
                     f"YoloNAS models must be exported in flat format and only have 1 output. Found {len(model_outputs)}."
                 )
                 self.model_invalid = True
-
-            if model_inputs[0].get_shape() != ov.Shape([1, 3, self.w, self.h]):
-                logger.error(
-                    f"YoloNAS model input doesn't match. Found {model_inputs[0].get_shape()}, but expected {[1, 3, self.w, self.h]}."
-                )
-                self.model_invalid = True
-
             output_shape = model_outputs[0].partial_shape
             if output_shape[-1] != 7:
                 logger.error(
@@ -134,25 +114,7 @@ class OvDetector(DetectionApi):
                     break
             self.num_classes = tensor_shape[2] - 5
             logger.info(f"YOLOX model has {self.num_classes} classes")
-            self.set_strides_grids()
-
-    def set_strides_grids(self):
-        grids = []
-        expanded_strides = []
-
-        strides = [8, 16, 32]
-
-        hsize_list = [self.h // stride for stride in strides]
-        wsize_list = [self.w // stride for stride in strides]
-
-        for hsize, wsize, stride in zip(hsize_list, wsize_list, strides):
-            xv, yv = np.meshgrid(np.arange(wsize), np.arange(hsize))
-            grid = np.stack((xv, yv), 2).reshape(1, -1, 2)
-            grids.append(grid)
-            shape = grid.shape[:2]
-            expanded_strides.append(np.full((*shape, 1), stride))
-        self.grids = np.concatenate(grids, 1)
-        self.expanded_strides = np.concatenate(expanded_strides, 1)
+            self.calculate_grids_strides()
 
     ## Takes in class ID, confidence score, and array of [x, y, w, h] that describes detection position,
     ## returns an array that's easily passable back to Frigate.
@@ -232,12 +194,13 @@ class OvDetector(DetectionApi):
                     x_max / self.w,
                 ]
             return detections
-        elif (
-            self.ov_model_type == ModelTypeEnum.yolov9
-            or self.ov_model_type == ModelTypeEnum.yologeneric
-        ):
-            out_tensor = infer_request.get_output_tensor(0).data
-            return post_process_yolov9(out_tensor, self.w, self.h)
+        elif self.ov_model_type == ModelTypeEnum.yologeneric:
+            out_tensor = []
+
+            for item in infer_request.output_tensors:
+                out_tensor.append(item.data)
+
+            return post_process_yolo(out_tensor, self.w, self.h)
         elif self.ov_model_type == ModelTypeEnum.yolox:
             out_tensor = infer_request.get_output_tensor()
             # [x, y, h, w, box_score, class_no_1, ..., class_no_80],

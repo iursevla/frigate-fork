@@ -44,6 +44,8 @@ import { formatUnixTimestampToDateTime } from "@/utils/dateUtil";
 import FilterSwitch from "@/components/filter/FilterSwitch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Trans, useTranslation } from "react-i18next";
+import { useDateLocale } from "@/hooks/use-date-locale";
+import { useDocDomain } from "@/hooks/use-doc-domain";
 
 const NOTIFICATION_SERVICE_WORKER = "notifications-worker.js";
 
@@ -60,6 +62,7 @@ export default function NotificationView({
   setUnsavedChanges,
 }: NotificationsSettingsViewProps) {
   const { t } = useTranslation(["views/settings"]);
+  const { getLocaleDocUrl } = useDocDomain();
 
   const { data: config, mutate: updateConfig } = useSWR<FrigateConfig>(
     "config",
@@ -104,7 +107,7 @@ export default function NotificationView({
     if (changedValue) {
       addMessage(
         "notification_settings",
-        `Unsaved notification settings`,
+        t("notification.unsavedChanges"),
         undefined,
         `notification_settings`,
       );
@@ -114,50 +117,6 @@ export default function NotificationView({
     // we know that these deps are correct
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [changedValue]);
-
-  // notification key handling
-
-  const { data: publicKey } = useSWR(
-    config?.notifications?.enabled ? "notifications/pubkey" : null,
-    { revalidateOnFocus: false },
-  );
-
-  const subscribeToNotifications = useCallback(
-    (registration: ServiceWorkerRegistration) => {
-      if (registration) {
-        addMessage(
-          "notification_settings",
-          "Unsaved Notification Registrations",
-          undefined,
-          "registration",
-        );
-
-        registration.pushManager
-          .subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: publicKey,
-          })
-          .then((pushSubscription) => {
-            axios
-              .post("notifications/register", {
-                sub: pushSubscription,
-              })
-              .catch(() => {
-                toast.error(t("notification.toast.error.registerFailed"), {
-                  position: "top-center",
-                });
-                pushSubscription.unsubscribe();
-                registration.unregister();
-                setRegistration(null);
-              });
-            toast.success(t("notification.toast.success.registered"), {
-              position: "top-center",
-            });
-          });
-      }
-    },
-    [publicKey, addMessage, t],
-  );
 
   // notification state
 
@@ -203,7 +162,69 @@ export default function NotificationView({
     },
   });
 
+  const watchAllEnabled = form.watch("allEnabled");
   const watchCameras = form.watch("cameras");
+
+  const anyCameraNotificationsEnabled = useMemo(
+    () =>
+      config &&
+      Object.values(config.cameras).some(
+        (c) =>
+          c.enabled_in_config &&
+          c.notifications &&
+          c.notifications.enabled_in_config,
+      ),
+    [config],
+  );
+
+  const shouldFetchPubKey = Boolean(
+    config &&
+      (config.notifications?.enabled || anyCameraNotificationsEnabled) &&
+      (watchAllEnabled ||
+        (Array.isArray(watchCameras) && watchCameras.length > 0)),
+  );
+
+  const { data: publicKey } = useSWR(
+    shouldFetchPubKey ? "notifications/pubkey" : null,
+    { revalidateOnFocus: false },
+  );
+
+  const subscribeToNotifications = useCallback(
+    (registration: ServiceWorkerRegistration) => {
+      if (registration) {
+        addMessage(
+          "notification_settings",
+          t("notification.unsavedRegistrations"),
+          undefined,
+          "registration",
+        );
+
+        registration.pushManager
+          .subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: publicKey,
+          })
+          .then((pushSubscription) => {
+            axios
+              .post("notifications/register", {
+                sub: pushSubscription,
+              })
+              .catch(() => {
+                toast.error(t("notification.toast.error.registerFailed"), {
+                  position: "top-center",
+                });
+                pushSubscription.unsubscribe();
+                registration.unregister();
+                setRegistration(null);
+              });
+            toast.success(t("notification.toast.success.registered"), {
+              position: "top-center",
+            });
+          });
+      }
+    },
+    [publicKey, addMessage, t],
+  );
 
   useEffect(() => {
     if (watchCameras.length > 0) {
@@ -298,6 +319,10 @@ export default function NotificationView({
     saveToConfig(values as NotificationSettingsValueType);
   }
 
+  useEffect(() => {
+    document.title = t("documentTitle.notifications");
+  }, [t]);
+
   if (!("Notification" in window) || !window.isSecureContext) {
     return (
       <div className="scrollbar-container order-last mb-10 mt-2 flex h-full w-full flex-col overflow-y-auto rounded-lg border-[1px] border-secondary-foreground bg-background_alt p-2 md:order-none md:mb-0 md:mr-2 md:mt-0">
@@ -311,14 +336,12 @@ export default function NotificationView({
                 <p>{t("notification.notificationSettings.desc")}</p>
                 <div className="flex items-center text-primary">
                   <Link
-                    to="https://docs.frigate.video/configuration/notifications"
+                    to={getLocaleDocUrl("configuration/notifications")}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline"
                   >
-                    <p>
-                      {t("notification.notificationSettings.documentation")}
-                    </p>{" "}
+                    {t("readTheDocumentation", { ns: "common" })}
                     <LuExternalLink className="ml-2 inline-flex size-3" />
                   </Link>
                 </div>
@@ -335,14 +358,12 @@ export default function NotificationView({
                 </Trans>
                 <div className="mt-3 flex items-center">
                   <Link
-                    to="https://docs.frigate.video/configuration/authentication"
+                    to={getLocaleDocUrl("configuration/authentication")}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline"
                   >
-                    <p>
-                      {t("notification.notificationUnavailable.documentation")}
-                    </p>{" "}
+                    {t("readTheDocumentation", { ns: "common" })}{" "}
                     <LuExternalLink className="ml-2 inline-flex size-3" />
                   </Link>
                 </div>
@@ -370,12 +391,12 @@ export default function NotificationView({
                   <p>{t("notification.notificationSettings.desc")}</p>
                   <div className="flex items-center text-primary">
                     <Link
-                      to="https://docs.frigate.video/configuration/notifications"
+                      to={getLocaleDocUrl("configuration/notifications")}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline"
                     >
-                      {t("notification.notificationSettings.documentation")}{" "}
+                      {t("readTheDocumentation", { ns: "common" })}{" "}
                       <LuExternalLink className="ml-2 inline-flex size-3" />
                     </Link>
                   </div>
@@ -518,9 +539,7 @@ export default function NotificationView({
                   </Heading>
                   <Button
                     aria-label={t("notification.registerDevice")}
-                    disabled={
-                      !config?.notifications.enabled || publicKey == undefined
-                    }
+                    disabled={!shouldFetchPubKey || publicKey == undefined}
                     onClick={() => {
                       if (registration == null) {
                         Notification.requestPermission().then((permission) => {
@@ -645,6 +664,8 @@ export function CameraNotificationSwitch({
     sendNotificationSuspend(0);
   };
 
+  const locale = useDateLocale();
+
   const formatSuspendedUntil = (timestamp: string) => {
     // Some languages require a change in word order
     if (timestamp === "0") return t("time.untilForRestart", { ns: "common" });
@@ -653,10 +674,15 @@ export function CameraNotificationSwitch({
       time_style: "medium",
       date_style: "medium",
       timezone: config?.ui.timezone,
-      strftime_fmt:
+      date_format:
         config?.ui.time_format == "24hour"
-          ? t("time.formattedTimestampExcludeSeconds.24hour", { ns: "common" })
-          : t("time.formattedTimestampExcludeSeconds.12hour", { ns: "common" }),
+          ? t("time.formattedTimestampMonthDayHourMinute.24hour", {
+              ns: "common",
+            })
+          : t("time.formattedTimestampMonthDayHourMinute.12hour", {
+              ns: "common",
+            }),
+      locale: locale,
     });
     return t("time.untilForTime", { ns: "common", time });
   };
@@ -672,7 +698,7 @@ export function CameraNotificationSwitch({
           )}
           <div className="flex flex-col">
             <Label
-              className="text-md cursor-pointer capitalize text-primary"
+              className="text-md cursor-pointer text-primary smart-capitalize"
               htmlFor="camera"
             >
               {camera.replaceAll("_", " ")}
@@ -696,7 +722,7 @@ export function CameraNotificationSwitch({
       {!isSuspended ? (
         <Select onValueChange={handleSuspend}>
           <SelectTrigger className="w-auto">
-            <SelectValue placeholder="Suspend" />
+            <SelectValue placeholder={t("notification.suspendTime.suspend")} />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="5">

@@ -24,6 +24,7 @@ import CalendarFilterButton from "./CalendarFilterButton";
 import { CamerasFilterButton } from "./CamerasFilterButton";
 import PlatformAwareDialog from "../overlay/dialog/PlatformAwareDialog";
 import { useTranslation } from "react-i18next";
+import { getTranslatedLabel } from "@/utils/i18n";
 
 const REVIEW_FILTERS = [
   "cameras",
@@ -92,6 +93,10 @@ export default function ReviewFilterGroup({
       cameraConfig.objects.track.forEach((label) => {
         labels.add(label);
       });
+
+      if (cameraConfig.type == "lpr") {
+        labels.add("license_plate");
+      }
 
       if (cameraConfig.audio.enabled_in_config) {
         cameraConfig.audio.listen.forEach((label) => {
@@ -350,7 +355,7 @@ function GeneralFilterButton({
       variant={
         selectedLabels?.length || selectedZones?.length ? "select" : "default"
       }
-      className="flex items-center gap-2 capitalize"
+      className="flex items-center gap-2 smart-capitalize"
       aria-label={t("filter")}
     >
       <FaFilter
@@ -494,7 +499,7 @@ export function GeneralFilterContent({
           {allLabels.map((item) => (
             <FilterSwitch
               key={item}
-              label={item.replaceAll("_", " ")}
+              label={getTranslatedLabel(item)}
               isChecked={filter.labels?.includes(item) ?? false}
               onCheckedChange={(isChecked) => {
                 if (isChecked) {

@@ -21,6 +21,7 @@ from frigate.const import (
     EXPORT_DIR,
     MAX_PLAYLIST_SECONDS,
     PREVIEW_FRAME_TYPE,
+    PROCESS_PRIORITY_LOW,
 )
 from frigate.ffmpeg_presets import (
     EncodeTypeEnum,
@@ -36,7 +37,7 @@ TIMELAPSE_DATA_INPUT_ARGS = "-an -skip_frame nokey"
 
 
 def lower_priority():
-    os.nice(10)
+    os.nice(PROCESS_PRIORITY_LOW)
 
 
 class PlaybackFactorEnum(str, Enum):
@@ -126,7 +127,7 @@ class RecordingExporter(threading.Thread):
             minutes = int(diff / 60)
             seconds = int(diff % 60)
             ffmpeg_cmd = [
-                self.config.ffmpeg.ffmpeg_path,
+                "/usr/lib/ffmpeg/7.0/bin/ffmpeg",  # hardcode path for exports thumbnail due to missing libwebp support
                 "-hide_banner",
                 "-loglevel",
                 "warning",

@@ -6,7 +6,9 @@
       "title": "所有标签",
       "short": "标签"
     },
-    "count": "{{count}} 个标签"
+    "count": "{{count}} 个标签",
+    "count_other": "{{count}} 个标签",
+    "count_one": "{{count}} 个标签"
   },
   "zones": {
     "all": {
@@ -19,7 +21,8 @@
     "all": {
       "title": "所有日期",
       "short": "日期"
-    }
+    },
+    "selectPreset": "选择预定时间…"
   },
   "more": "更多筛选项",
   "reset": {
@@ -38,7 +41,7 @@
     "hasVideoClip": "包含视频片段",
     "submittedToFrigatePlus": {
       "label": "提交至 Frigate+",
-      "tips": "你必须要先筛选具有快照的探测对象。<br /><br />没有快照的跟踪对象无法提交至 Frigate+."
+      "tips": "你必须要先筛选具有快照的检测对象。<br /><br />没有快照的跟踪对象无法提交至 Frigate+."
     }
   },
   "sort": {
@@ -59,7 +62,7 @@
     }
   },
   "review": {
-    "showReviewed": "显示已查看的项目"
+    "showReviewed": "显示已核查的项目"
   },
   "motion": {
     "showMotionOnly": "仅显示运动"
@@ -116,9 +119,17 @@
   "recognizedLicensePlates": {
     "title": "识别的车牌",
     "loadFailed": "加载识别的车牌失败。",
-    "loading": "正在加载识别的车牌...",
-    "placeholder": "输入以搜索车牌...",
+    "loading": "正在加载识别的车牌…",
+    "placeholder": "输入以搜索车牌…",
     "noLicensePlatesFound": "未找到车牌。",
     "selectPlatesFromList": "从列表中选择一个或多个车牌。"
+  },
+  "classes": {
+    "label": "分类",
+    "all": {
+      "title": "所有分类"
+    },
+    "count_one": "{{count}} 个分类",
+    "count_other": "{{count}} 个分类"
   }
 }

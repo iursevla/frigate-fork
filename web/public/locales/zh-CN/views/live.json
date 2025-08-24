@@ -3,12 +3,12 @@
   "documentTitle.withCamera": "{{camera}} - 实时监控 - Frigate",
   "lowBandwidthMode": "低带宽模式",
   "twoWayTalk": {
-    "enable": "开启双向对话",
-    "disable": "关闭双向对话"
+    "enable": "开启实时对话",
+    "disable": "关闭实时通话"
   },
   "cameraAudio": {
-    "enable": "开启摄像头音频",
-    "disable": "关闭摄像头音频"
+    "enable": "开启音频输出",
+    "disable": "关闭音频输出"
   },
   "ptz": {
     "move": {
@@ -43,7 +43,15 @@
         "label": "点击将PTZ摄像头画面居中"
       }
     },
-    "presets": "PTZ摄像头预设"
+    "presets": "PTZ摄像头预设",
+    "focus": {
+      "in": {
+        "label": "PTZ摄像头聚焦"
+      },
+      "out": {
+        "label": "PTZ摄像头拉远"
+      }
+    }
   },
   "camera": {
     "enable": "开启摄像头",
@@ -90,18 +98,18 @@
     },
     "debugView": "调试视图",
     "start": "开始手动按需录制",
-    "started": "已启用手动按需录制",
-    "failedToStart": "启动手动录制失败",
+    "started": "已启用手动按需录制。",
+    "failedToStart": "启动手动录制失败。",
     "recordDisabledTips": "由于此摄像头的配置中禁用了录制或对其进行了限制，将只会保存快照。",
     "end": "停止手动按需录制",
-    "ended": "已完成手动按需录制",
-    "failedToEnd": "停止手动录制失败"
+    "ended": "已完成手动按需录制。",
+    "failedToEnd": "停止手动录制失败。"
   },
   "streamingSettings": "视频流设置",
   "notifications": "通知",
   "audio": "音频",
   "suspend": {
-    "forTime": "暂停时长："
+    "forTime": "暂停时长： "
   },
   "stream": {
     "title": "视频流",
@@ -135,7 +143,8 @@
     "recording": "录制",
     "snapshots": "快照",
     "audioDetection": "音频检测",
-    "autotracking": "自动跟踪"
+    "autotracking": "自动跟踪",
+    "transcription": "音频转录"
   },
   "history": {
     "label": "显示历史录像"
@@ -151,8 +160,12 @@
   "editLayout": {
     "label": "编辑布局",
     "group": {
-      "label": "编辑摄像机分组"
+      "label": "编辑摄像头分组"
     },
     "exitEdit": "退出编辑"
+  },
+  "transcription": {
+    "enable": "启用实时音频转录",
+    "disable": "关闭实时音频转录"
   }
 }

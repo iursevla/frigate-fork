@@ -1,0 +1,20 @@
+{
+  "documentTitle": "Uživo - Frigate",
+  "documentTitle.withCamera": "{{camera}} - Uživo - Frigate",
+  "lowBandwidthMode": "Režim niskog propusnog opsega",
+  "twoWayTalk": {
+    "enable": "Omogući dvosmerni razgovor",
+    "disable": "Onemogućite dvosmerni razgovor"
+  },
+  "cameraAudio": {
+    "enable": "Omogući zvuk kamere",
+    "disable": "Onemogući zvuk kamere"
+  },
+  "ptz": {
+    "move": {
+      "clickMove": {
+        "label": "Kliknite na sliku da bi centrirali kameru"
+      }
+    }
+  }
+}

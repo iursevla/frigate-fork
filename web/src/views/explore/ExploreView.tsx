@@ -22,6 +22,7 @@ import SearchResultActions from "@/components/menu/SearchResultActions";
 import { SearchTab } from "@/components/overlay/detail/SearchDetailDialog";
 import { FrigateConfig } from "@/types/frigateConfig";
 import { useTranslation } from "react-i18next";
+import { getTranslatedLabel } from "@/utils/i18n";
 
 type ExploreViewProps = {
   searchDetail: SearchResult | undefined;
@@ -74,13 +75,13 @@ export default function ExploreView({
     }, {});
   }, [events]);
 
-  const trackedObjectUpdate = useTrackedObjectUpdate();
+  const { payload: wsUpdate } = useTrackedObjectUpdate();
 
   useEffect(() => {
-    mutate();
-    // mutate / revalidate when event description updates come in
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackedObjectUpdate]);
+    if (wsUpdate && wsUpdate.type == "description") {
+      mutate();
+    }
+  }, [wsUpdate, mutate]);
 
   // update search detail when results change
 
@@ -151,8 +152,8 @@ function ThumbnailRow({
 
   return (
     <div className="rounded-lg bg-background_alt p-2 md:px-4">
-      <div className="flex flex-row items-center text-lg capitalize">
-        {t(objectType, { ns: "objects" })}
+      <div className="flex flex-row items-center text-lg smart-capitalize">
+        {getTranslatedLabel(objectType)}
         {searchResults && (
           <span className="ml-3 text-sm text-secondary-foreground">
             {t("trackedObjectsCount", {
@@ -190,8 +191,8 @@ function ThumbnailRow({
               />
             </TooltipTrigger>
             <TooltipPortal>
-              <TooltipContent className="capitalize">
-                <ExploreMoreLink objectType={objectType} />
+              <TooltipContent>
+                {t("exploreMore", { label: getTranslatedLabel(objectType) })}
               </TooltipContent>
             </TooltipPortal>
           </Tooltip>
@@ -218,6 +219,7 @@ function ExploreThumbnailImage({
   const apiHost = useApiHost();
   const { data: config } = useSWR<FrigateConfig>("config");
   const [imgRef, imgLoaded, onImgLoad] = useImageLoaded();
+  const navigate = useNavigate();
 
   const handleFindSimilar = () => {
     if (config?.semantic_search.enabled) {
@@ -233,6 +235,12 @@ function ExploreThumbnailImage({
     onSelectSearch(event, false, "snapshot");
   };
 
+  const handleAddTrigger = () => {
+    navigate(
+      `/settings?page=triggers&camera=${event.camera}&event_id=${event.id}`,
+    );
+  };
+
   return (
     <SearchResultActions
       searchResult={event}
@@ -240,6 +248,7 @@ function ExploreThumbnailImage({
       refreshResults={mutate}
       showObjectLifecycle={handleShowObjectLifecycle}
       showSnapshot={handleShowSnapshot}
+      addTrigger={handleAddTrigger}
       isContextMenu={true}
     >
       <div className="relative size-full">
@@ -282,13 +291,4 @@ function ExploreThumbnailImage({
       </div>
     </SearchResultActions>
   );
-}
-
-function ExploreMoreLink({ objectType }: { objectType: string }) {
-  const formattedType = objectType.replaceAll("_", " ");
-  const label = formattedType.endsWith("s")
-    ? `${formattedType}es`
-    : `${formattedType}s`;
-
-  return <div>Explore More {label}</div>;
 }

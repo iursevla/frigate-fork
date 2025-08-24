@@ -1,18 +1,18 @@
 """Manage camera activity and updating listeners."""
 
 from collections import Counter
-from typing import Callable
+from typing import Any, Callable
 
-from frigate.config.config import FrigateConfig
+from frigate.config import CameraConfig, FrigateConfig
 
 
 class CameraActivityManager:
     def __init__(
-        self, config: FrigateConfig, publish: Callable[[str, any], None]
+        self, config: FrigateConfig, publish: Callable[[str, Any], None]
     ) -> None:
         self.config = config
         self.publish = publish
-        self.last_camera_activity: dict[str, dict[str, any]] = {}
+        self.last_camera_activity: dict[str, dict[str, Any]] = {}
         self.camera_all_object_counts: dict[str, Counter] = {}
         self.camera_active_object_counts: dict[str, Counter] = {}
         self.zone_all_object_counts: dict[str, Counter] = {}
@@ -23,26 +23,33 @@ class CameraActivityManager:
             if not camera_config.enabled_in_config:
                 continue
 
-            self.last_camera_activity[camera_config.name] = {}
-            self.camera_all_object_counts[camera_config.name] = Counter()
-            self.camera_active_object_counts[camera_config.name] = Counter()
+            self.__init_camera(camera_config)
 
-            for zone, zone_config in camera_config.zones.items():
-                if zone not in self.all_zone_labels:
-                    self.zone_all_object_counts[zone] = Counter()
-                    self.zone_active_object_counts[zone] = Counter()
-                    self.all_zone_labels[zone] = set()
+    def __init_camera(self, camera_config: CameraConfig) -> None:
+        self.last_camera_activity[camera_config.name] = {}
+        self.camera_all_object_counts[camera_config.name] = Counter()
+        self.camera_active_object_counts[camera_config.name] = Counter()
 
-                self.all_zone_labels[zone].update(
-                    zone_config.objects
-                    if zone_config.objects
-                    else camera_config.objects.track
-                )
+        for zone, zone_config in camera_config.zones.items():
+            if zone not in self.all_zone_labels:
+                self.zone_all_object_counts[zone] = Counter()
+                self.zone_active_object_counts[zone] = Counter()
+                self.all_zone_labels[zone] = set()
 
-    def update_activity(self, new_activity: dict[str, dict[str, any]]) -> None:
-        all_objects: list[dict[str, any]] = []
+            self.all_zone_labels[zone].update(
+                zone_config.objects
+                if zone_config.objects
+                else camera_config.objects.track
+            )
+
+    def update_activity(self, new_activity: dict[str, dict[str, Any]]) -> None:
+        all_objects: list[dict[str, Any]] = []
 
         for camera in new_activity.keys():
+            # handle cameras that were added dynamically
+            if camera not in self.camera_all_object_counts:
+                self.__init_camera(self.config.cameras[camera])
+
             new_objects = new_activity[camera].get("objects", [])
             all_objects.extend(new_objects)
 
@@ -93,7 +100,7 @@ class CameraActivityManager:
         self.last_camera_activity = new_activity
 
     def compare_camera_activity(
-        self, camera: str, new_activity: dict[str, any]
+        self, camera: str, new_activity: dict[str, Any]
     ) -> None:
         all_objects = Counter(
             obj["label"].replace("-verified", "") for obj in new_activity

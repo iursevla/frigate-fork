@@ -91,7 +91,10 @@ export function AnimatedEventCard({
 
   // image behavior
 
-  const [alertVideos] = usePersistence("alertVideos", true);
+  const [alertVideos, _, alertVideosLoaded] = usePersistence(
+    "alertVideos",
+    true,
+  );
 
   const aspectRatio = useMemo(() => {
     if (
@@ -135,7 +138,7 @@ export function AnimatedEventCard({
               <TooltipContent>{t("markAsReviewed")}</TooltipContent>
             </Tooltip>
           )}
-          {previews != undefined && (
+          {previews != undefined && alertVideosLoaded && (
             <div
               className="size-full cursor-pointer"
               onClick={onOpenReview}
@@ -229,7 +232,7 @@ export function AnimatedEventCard({
           .map((text) => text.charAt(0).toUpperCase() + text.substring(1))
           .sort()
           .join(", ")
-          .replaceAll("-verified", "")} detected`}
+          .replaceAll("-verified", "")} ` + t("detected")}
       </TooltipContent>
     </Tooltip>
   );

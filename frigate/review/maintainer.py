@@ -1,5 +1,7 @@
 """Maintain review segments in db."""
 
+import copy
+import datetime
 import json
 import logging
 import os
@@ -9,15 +11,19 @@ import sys
 import threading
 from multiprocessing.synchronize import Event as MpEvent
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import cv2
 import numpy as np
 
-from frigate.comms.config_updater import ConfigSubscriber
 from frigate.comms.detections_updater import DetectionSubscriber, DetectionTypeEnum
 from frigate.comms.inter_process import InterProcessRequestor
+from frigate.comms.review_updater import ReviewDataPublisher
 from frigate.config import CameraConfig, FrigateConfig
+from frigate.config.camera.updater import (
+    CameraConfigUpdateEnum,
+    CameraConfigUpdateSubscriber,
+)
 from frigate.const import (
     CLEAR_ONGOING_REVIEW_SEGMENTS,
     CLIPS_DIR,
@@ -59,6 +65,7 @@ class PendingReviewSegment:
         self.zones = zones
         self.audio = audio
         self.last_update = frame_time
+        self.thumb_time: float | None = None
 
         # thumbnail
         self._frame = np.zeros((THUMB_HEIGHT * 3 // 2, THUMB_WIDTH), np.uint8)
@@ -100,6 +107,7 @@ class PendingReviewSegment:
         )
 
         if self._frame is not None:
+            self.thumb_time = datetime.datetime.now().timestamp()
             self.has_frame = True
             cv2.imwrite(
                 self.frame_path, self._frame, [int(cv2.IMWRITE_WEBP_QUALITY), 60]
@@ -119,21 +127,25 @@ class PendingReviewSegment:
             )
 
     def get_data(self, ended: bool) -> dict:
-        return {
-            ReviewSegment.id.name: self.id,
-            ReviewSegment.camera.name: self.camera,
-            ReviewSegment.start_time.name: self.start_time,
-            ReviewSegment.end_time.name: self.last_update if ended else None,
-            ReviewSegment.severity.name: self.severity.value,
-            ReviewSegment.thumb_path.name: self.frame_path,
-            ReviewSegment.data.name: {
-                "detections": list(set(self.detections.keys())),
-                "objects": list(set(self.detections.values())),
-                "sub_labels": list(self.sub_labels.values()),
-                "zones": self.zones,
-                "audio": list(self.audio),
-            },
-        }.copy()
+        return copy.deepcopy(
+            {
+                ReviewSegment.id.name: self.id,
+                ReviewSegment.camera.name: self.camera,
+                ReviewSegment.start_time.name: self.start_time,
+                ReviewSegment.end_time.name: self.last_update if ended else None,
+                ReviewSegment.severity.name: self.severity.value,
+                ReviewSegment.thumb_path.name: self.frame_path,
+                ReviewSegment.data.name: {
+                    "detections": list(set(self.detections.keys())),
+                    "objects": list(set(self.detections.values())),
+                    "sub_labels": list(self.sub_labels.values()),
+                    "zones": self.zones,
+                    "audio": list(self.audio),
+                    "thumb_time": self.thumb_time,
+                    "metadata": None,
+                },
+            }
+        )
 
 
 class ReviewSegmentMaintainer(threading.Thread):
@@ -147,13 +159,22 @@ class ReviewSegmentMaintainer(threading.Thread):
 
         # create communication for review segments
         self.requestor = InterProcessRequestor()
-        self.record_config_subscriber = ConfigSubscriber("config/record/")
-        self.review_config_subscriber = ConfigSubscriber("config/review/")
-        self.enabled_config_subscriber = ConfigSubscriber("config/enabled/")
-        self.detection_subscriber = DetectionSubscriber(DetectionTypeEnum.all)
+        self.config_subscriber = CameraConfigUpdateSubscriber(
+            config,
+            config.cameras,
+            [
+                CameraConfigUpdateEnum.add,
+                CameraConfigUpdateEnum.enabled,
+                CameraConfigUpdateEnum.record,
+                CameraConfigUpdateEnum.remove,
+                CameraConfigUpdateEnum.review,
+            ],
+        )
+        self.detection_subscriber = DetectionSubscriber(DetectionTypeEnum.all.value)
+        self.review_publisher = ReviewDataPublisher("")
 
         # manual events
-        self.indefinite_events: dict[str, dict[str, any]] = {}
+        self.indefinite_events: dict[str, dict[str, Any]] = {}
 
         # ensure dirs
         Path(os.path.join(CLIPS_DIR, "review")).mkdir(exist_ok=True)
@@ -171,16 +192,16 @@ class ReviewSegmentMaintainer(threading.Thread):
         new_data = segment.get_data(ended=False)
         self.requestor.send_data(UPSERT_REVIEW_SEGMENT, new_data)
         start_data = {k: v for k, v in new_data.items()}
+        review_update = {
+            "type": "new",
+            "before": start_data,
+            "after": start_data,
+        }
         self.requestor.send_data(
             "reviews",
-            json.dumps(
-                {
-                    "type": "new",
-                    "before": start_data,
-                    "after": start_data,
-                }
-            ),
+            json.dumps(review_update),
         )
+        self.review_publisher.publish(review_update, segment.camera)
         self.requestor.send_data(
             f"{segment.camera}/review_status", segment.severity.value.upper()
         )
@@ -191,7 +212,7 @@ class ReviewSegmentMaintainer(threading.Thread):
         camera_config: CameraConfig,
         frame,
         objects: list[TrackedObject],
-        prev_data: dict[str, any],
+        prev_data: dict[str, Any],
     ) -> None:
         """Update segment."""
         if frame is not None:
@@ -199,16 +220,16 @@ class ReviewSegmentMaintainer(threading.Thread):
 
         new_data = segment.get_data(ended=False)
         self.requestor.send_data(UPSERT_REVIEW_SEGMENT, new_data)
+        review_update = {
+            "type": "update",
+            "before": {k: v for k, v in prev_data.items()},
+            "after": {k: v for k, v in new_data.items()},
+        }
         self.requestor.send_data(
             "reviews",
-            json.dumps(
-                {
-                    "type": "update",
-                    "before": {k: v for k, v in prev_data.items()},
-                    "after": {k: v for k, v in new_data.items()},
-                }
-            ),
+            json.dumps(review_update),
         )
+        self.review_publisher.publish(review_update, segment.camera)
         self.requestor.send_data(
             f"{segment.camera}/review_status", segment.severity.value.upper()
         )
@@ -216,21 +237,21 @@ class ReviewSegmentMaintainer(threading.Thread):
     def _publish_segment_end(
         self,
         segment: PendingReviewSegment,
-        prev_data: dict[str, any],
+        prev_data: dict[str, Any],
     ) -> None:
         """End segment."""
         final_data = segment.get_data(ended=True)
         self.requestor.send_data(UPSERT_REVIEW_SEGMENT, final_data)
+        review_update = {
+            "type": "end",
+            "before": {k: v for k, v in prev_data.items()},
+            "after": {k: v for k, v in final_data.items()},
+        }
         self.requestor.send_data(
             "reviews",
-            json.dumps(
-                {
-                    "type": "end",
-                    "before": {k: v for k, v in prev_data.items()},
-                    "after": {k: v for k, v in final_data.items()},
-                }
-            ),
+            json.dumps(review_update),
         )
+        self.review_publisher.publish(review_update, segment.camera)
         self.requestor.send_data(f"{segment.camera}/review_status", "NONE")
         self.active_review_segments[segment.camera] = None
 
@@ -455,49 +476,22 @@ class ReviewSegmentMaintainer(threading.Thread):
     def run(self) -> None:
         while not self.stop_event.is_set():
             # check if there is an updated config
-            while True:
-                (
-                    updated_record_topic,
-                    updated_record_config,
-                ) = self.record_config_subscriber.check_for_update()
+            updated_topics = self.config_subscriber.check_for_updates()
 
-                (
-                    updated_review_topic,
-                    updated_review_config,
-                ) = self.review_config_subscriber.check_for_update()
+            if "record" in updated_topics:
+                for camera in updated_topics["record"]:
+                    self.end_segment(camera)
 
-                (
-                    updated_enabled_topic,
-                    updated_enabled_config,
-                ) = self.enabled_config_subscriber.check_for_update()
-
-                if (
-                    not updated_record_topic
-                    and not updated_review_topic
-                    and not updated_enabled_topic
-                ):
-                    break
-
-                if updated_record_topic:
-                    camera_name = updated_record_topic.rpartition("/")[-1]
-                    self.config.cameras[camera_name].record = updated_record_config
-
-                if updated_review_topic:
-                    camera_name = updated_review_topic.rpartition("/")[-1]
-                    self.config.cameras[camera_name].review = updated_review_config
-
-                if updated_enabled_config:
-                    camera_name = updated_enabled_topic.rpartition("/")[-1]
-                    self.config.cameras[
-                        camera_name
-                    ].enabled = updated_enabled_config.enabled
+            if "enabled" in updated_topics:
+                for camera in updated_topics["enabled"]:
+                    self.end_segment(camera)
 
             (topic, data) = self.detection_subscriber.check_for_update(timeout=1)
 
             if not topic:
                 continue
 
-            if topic == DetectionTypeEnum.video:
+            if topic == DetectionTypeEnum.video.value:
                 (
                     camera,
                     frame_name,
@@ -506,14 +500,14 @@ class ReviewSegmentMaintainer(threading.Thread):
                     _,
                     _,
                 ) = data
-            elif topic == DetectionTypeEnum.audio:
+            elif topic == DetectionTypeEnum.audio.value:
                 (
                     camera,
                     frame_time,
                     _,
                     audio_detections,
                 ) = data
-            elif topic == DetectionTypeEnum.api or DetectionTypeEnum.lpr:
+            elif topic == DetectionTypeEnum.api.value or DetectionTypeEnum.lpr.value:
                 (
                     camera,
                     frame_time,
@@ -523,15 +517,13 @@ class ReviewSegmentMaintainer(threading.Thread):
                 if camera not in self.indefinite_events:
                     self.indefinite_events[camera] = {}
 
-            current_segment = self.active_review_segments.get(camera)
-
             if (
                 not self.config.cameras[camera].enabled
                 or not self.config.cameras[camera].record.enabled
             ):
-                if current_segment:
-                    self.end_segment(camera)
                 continue
+
+            current_segment = self.active_review_segments.get(camera)
 
             # Check if the current segment should be processed based on enabled settings
             if current_segment:
@@ -721,8 +713,7 @@ class ReviewSegmentMaintainer(threading.Thread):
                             f"Dedicated LPR camera API has been called for {camera}, but detections are disabled. LPR events will not appear as a detection."
                         )
 
-        self.record_config_subscriber.stop()
-        self.review_config_subscriber.stop()
+        self.config_subscriber.stop()
         self.requestor.stop()
         self.detection_subscriber.stop()
         logger.info("Exiting review maintainer...")

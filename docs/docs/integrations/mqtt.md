@@ -28,7 +28,14 @@ Message published for each changed tracked object. The first message is publishe
     "id": "1607123955.475377-mxklsc",
     "camera": "front_door",
     "frame_time": 1607123961.837752,
-    "snapshot_time": 1607123961.837752,
+    "snapshot": {
+        "frame_time": 1607123965.975463,
+        "box": [415, 489, 528, 700],
+        "area": 12728,
+        "region": [260, 446, 660, 846],
+        "score": 0.77546,
+        "attributes": [],
+    },
     "label": "person",
     "sub_label": null,
     "top_score": 0.958984375,
@@ -62,7 +69,14 @@ Message published for each changed tracked object. The first message is publishe
     "id": "1607123955.475377-mxklsc",
     "camera": "front_door",
     "frame_time": 1607123962.082975,
-    "snapshot_time": 1607123961.837752,
+    "snapshot": {
+        "frame_time": 1607123965.975463,
+        "box": [415, 489, 528, 700],
+        "area": 12728,
+        "region": [260, 446, 660, 846],
+        "score": 0.77546,
+        "attributes": [],
+    },
     "label": "person",
     "sub_label": ["John Smith", 0.79],
     "top_score": 0.958984375,
@@ -104,13 +118,42 @@ Message published for each changed tracked object. The first message is publishe
 
 ### `frigate/tracked_object_update`
 
-Message published for updates to tracked object metadata, for example when GenAI runs and returns a tracked object description.
+Message published for updates to tracked object metadata, for example:
+
+#### Generative AI Description Update
 
 ```json
 {
   "type": "description",
   "id": "1607123955.475377-mxklsc",
   "description": "The car is a red sedan moving away from the camera."
+}
+```
+
+#### Face Recognition Update
+
+```json
+{
+  "type": "face",
+  "id": "1607123955.475377-mxklsc",
+  "name": "John",
+  "score": 0.95,
+  "camera": "front_door_cam",
+  "timestamp": 1607123958.748393
+}
+```
+
+#### License Plate Recognition Update
+
+```json
+{
+  "type": "lpr",
+  "id": "1607123955.475377-mxklsc",
+  "name": "John's Car",
+  "plate": "123ABC",
+  "score": 0.95,
+  "camera": "driveway_cam",
+  "timestamp": 1607123958.748393
 }
 ```
 
@@ -163,6 +206,20 @@ Message published for each changed review item. The first message is published w
 }
 ```
 
+### `frigate/triggers`
+
+Message published when a trigger defined in a camera's `semantic_search` configuration fires.
+
+```json
+{
+  "name": "car_trigger",
+  "camera": "driveway",
+  "event_id": "1751565549.853251-b69j73",
+  "type": "thumbnail",
+  "score": 0.85
+}
+```
+
 ### `frigate/stats`
 
 Same data available at `/api/stats` published at a configurable interval.
@@ -180,6 +237,14 @@ Topic to turn notifications on and off. Expected values are `ON` and `OFF`.
 Topic with current state of notifications. Published values are `ON` and `OFF`.
 
 ## Frigate Camera Topics
+
+### `frigate/<camera_name>/<role>/status`
+
+Publishes the current health status of each role that is enabled (`audio`, `detect`, `record`). Possible values are:
+
+- `online`: Stream is running and being processed
+- `offline`: Stream is offline and is being restarted
+- `disabled`: Camera is currently disabled
 
 ### `frigate/<camera_name>/<object_name>`
 
@@ -225,6 +290,12 @@ Publishes the dBFS value for audio detected on this camera.
 Publishes the rms value for audio detected on this camera.
 
 **NOTE:** Requires audio detection to be enabled
+
+### `frigate/<camera_name>/audio/transcription`
+
+Publishes transcribed text for audio detected on this camera.
+
+**NOTE:** Requires audio detection and transcription to be enabled
 
 ### `frigate/<camera_name>/enabled/set`
 
@@ -347,6 +418,22 @@ Topic to turn review detections for a camera on or off. Expected values are `ON`
 ### `frigate/<camera_name>/review_detections/state`
 
 Topic with current state of review detections for a camera. Published values are `ON` and `OFF`.
+
+### `frigate/<camera_name>/object_descriptions/set`
+
+Topic to turn generative AI object descriptions for a camera on or off. Expected values are `ON` and `OFF`.
+
+### `frigate/<camera_name>/object_descriptions/state`
+
+Topic with current state of generative AI object descriptions for a camera. Published values are `ON` and `OFF`.
+
+### `frigate/<camera_name>/review_descriptions/set`
+
+Topic to turn generative AI review descriptions for a camera on or off. Expected values are `ON` and `OFF`.
+
+### `frigate/<camera_name>/review_descriptions/state`
+
+Topic with current state of generative AI review descriptions for a camera. Published values are `ON` and `OFF`.
 
 ### `frigate/<camera_name>/birdseye/set`
 

@@ -2,6 +2,7 @@
 
 import logging
 import os
+from typing import Any
 
 import cv2
 import numpy as np
@@ -12,6 +13,7 @@ from frigate.comms.event_metadata_updater import (
 )
 from frigate.config import FrigateConfig
 from frigate.const import MODEL_CACHE_DIR
+from frigate.log import redirect_output_to_logger
 from frigate.util.object import calculate_region
 
 from ..types import DataProcessorMetrics
@@ -35,8 +37,8 @@ class BirdRealTimeProcessor(RealTimeProcessorApi):
         super().__init__(config, metrics)
         self.interpreter: Interpreter = None
         self.sub_label_publisher = sub_label_publisher
-        self.tensor_input_details: dict[str, any] = None
-        self.tensor_output_details: dict[str, any] = None
+        self.tensor_input_details: dict[str, Any] = None
+        self.tensor_output_details: dict[str, Any] = None
         self.detected_birds: dict[str, float] = {}
         self.labelmap: dict[int, str] = {}
 
@@ -75,6 +77,7 @@ class BirdRealTimeProcessor(RealTimeProcessorApi):
         except Exception as e:
             logger.error(f"Failed to download {path}: {e}")
 
+    @redirect_output_to_logger(logger, logging.DEBUG)
     def __build_detector(self) -> None:
         self.interpreter = Interpreter(
             model_path=os.path.join(MODEL_CACHE_DIR, "bird/bird.tflite"),
@@ -96,6 +99,9 @@ class BirdRealTimeProcessor(RealTimeProcessorApi):
                 line = f.readline()
 
     def process_frame(self, obj_data, frame):
+        if not self.interpreter:
+            return
+
         if obj_data["label"] != "bird":
             return
 
@@ -105,7 +111,13 @@ class BirdRealTimeProcessor(RealTimeProcessorApi):
             obj_data["box"][1],
             obj_data["box"][2],
             obj_data["box"][3],
-            224,
+            int(
+                max(
+                    obj_data["box"][1] - obj_data["box"][0],
+                    obj_data["box"][3] - obj_data["box"][2],
+                )
+                * 1.1
+            ),
             1.0,
         )
 
@@ -144,14 +156,14 @@ class BirdRealTimeProcessor(RealTimeProcessorApi):
             return
 
         self.sub_label_publisher.publish(
-            EventMetadataTypeEnum.sub_label,
             (obj_data["id"], self.labelmap[best_id], score),
+            EventMetadataTypeEnum.sub_label.value,
         )
         self.detected_birds[obj_data["id"]] = score
 
     def handle_request(self, topic, request_data):
         return None
 
-    def expire_object(self, object_id):
+    def expire_object(self, object_id, camera):
         if object_id in self.detected_birds:
             self.detected_birds.pop(object_id)

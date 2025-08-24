@@ -1,14 +1,7 @@
 import { FrigateConfig } from "@/types/frigateConfig";
 import useSWR from "swr";
 import ActivityIndicator from "@/components/indicators/activity-indicator";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PolygonCanvas } from "@/components/settings/PolygonCanvas";
 import { Polygon, PolygonType } from "@/types/canvas";
 import { interpolatePoints, parseCoordinates } from "@/utils/canvasUtil";
@@ -36,10 +29,12 @@ import ObjectMaskEditPane from "@/components/settings/ObjectMaskEditPane";
 import PolygonItem from "@/components/settings/PolygonItem";
 import { Link } from "react-router-dom";
 import { isDesktop } from "react-device-detect";
-import { StatusBarMessagesContext } from "@/context/statusbar-provider";
 
 import { useSearchEffect } from "@/hooks/use-overlay-state";
 import { useTranslation } from "react-i18next";
+
+import { useDocDomain } from "@/hooks/use-doc-domain";
+import { getTranslatedLabel } from "@/utils/i18n";
 
 type MasksAndZoneViewProps = {
   selectedCamera: string;
@@ -53,6 +48,7 @@ export default function MasksAndZonesView({
   setUnsavedChanges,
 }: MasksAndZoneViewProps) {
   const { t } = useTranslation(["views/settings"]);
+  const { getLocaleDocUrl } = useDocDomain();
   const { data: config } = useSWR<FrigateConfig>("config");
   const [allPolygons, setAllPolygons] = useState<Polygon[]>([]);
   const [editingPolygons, setEditingPolygons] = useState<Polygon[]>([]);
@@ -67,8 +63,6 @@ export default function MasksAndZonesView({
   const [editPane, setEditPane] = useState<PolygonType | undefined>(undefined);
   const [activeLine, setActiveLine] = useState<number | undefined>();
   const [snapPoints, setSnapPoints] = useState(false);
-
-  const { addMessage } = useContext(StatusBarMessagesContext)!;
 
   const cameraConfig = useMemo(() => {
     if (config && selectedCamera) {
@@ -192,13 +186,7 @@ export default function MasksAndZonesView({
     setAllPolygons([...(editingPolygons ?? [])]);
     setHoveredPolygonIndex(null);
     setUnsavedChanges(false);
-    addMessage(
-      "masks_zones",
-      "Restart required (masks/zones changed)",
-      undefined,
-      "masks_zones",
-    );
-  }, [editingPolygons, setUnsavedChanges, addMessage]);
+  }, [editingPolygons, setUnsavedChanges]);
 
   useEffect(() => {
     if (isLoading) {
@@ -271,7 +259,9 @@ export default function MasksAndZonesView({
         type: "motion_mask" as PolygonType,
         typeIndex: index,
         camera: cameraConfig.name,
-        name: `Motion Mask ${index + 1}`,
+        name: t("masksAndZones.motionMaskLabel", {
+          number: index + 1,
+        }),
         objects: [],
         points: interpolatePoints(
           parseCoordinates(maskData),
@@ -295,7 +285,10 @@ export default function MasksAndZonesView({
         type: "object_mask" as PolygonType,
         typeIndex: index,
         camera: cameraConfig.name,
-        name: `Object Mask ${index + 1} (all objects)`,
+        name: t("masksAndZones.objectMaskLabel", {
+          number: index + 1,
+          label: t("masksAndZones.zones.allObjects"),
+        }),
         objects: [],
         points: interpolatePoints(
           parseCoordinates(maskData),
@@ -322,7 +315,10 @@ export default function MasksAndZonesView({
               type: "object_mask" as PolygonType,
               typeIndex: subIndex,
               camera: cameraConfig.name,
-              name: `Object Mask ${globalObjectMasksCount + index + 1} (${objectName})`,
+              name: t("masksAndZones.objectMaskLabel", {
+                number: globalObjectMasksCount + index + 1,
+                label: getTranslatedLabel(objectName),
+              }),
               objects: [objectName],
               points: interpolatePoints(
                 parseCoordinates(maskItem),
@@ -505,12 +501,12 @@ export default function MasksAndZonesView({
                               <p>{t("masksAndZones.zones.desc.title")}</p>
                               <div className="flex items-center text-primary">
                                 <Link
-                                  to="https://docs.frigate.video/configuration/zones"
+                                  to={getLocaleDocUrl("configuration/zones")}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline"
                                 >
-                                  {t("masksAndZones.zones.desc.documentation")}{" "}
+                                  {t("readTheDocumentation", { ns: "common" })}
                                   <LuExternalLink className="ml-2 inline-flex size-3" />
                                 </Link>
                               </div>
@@ -571,14 +567,14 @@ export default function MasksAndZonesView({
                               <p>{t("masksAndZones.motionMasks.desc.title")}</p>
                               <div className="flex items-center text-primary">
                                 <Link
-                                  to="https://docs.frigate.video/configuration/masks#motion-masks"
+                                  to={getLocaleDocUrl(
+                                    "configuration/masks#motion-masks",
+                                  )}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline"
                                 >
-                                  {t(
-                                    "masksAndZones.motionMasks.desc.documentation",
-                                  )}{" "}
+                                  {t("readTheDocumentation", { ns: "common" })}
                                   <LuExternalLink className="ml-2 inline-flex size-3" />
                                 </Link>
                               </div>
@@ -641,14 +637,14 @@ export default function MasksAndZonesView({
                               <p>{t("masksAndZones.objectMasks.desc.title")}</p>
                               <div className="flex items-center text-primary">
                                 <Link
-                                  to="https://docs.frigate.video/configuration/masks#object-filter-masks"
+                                  to={getLocaleDocUrl(
+                                    "configuration/masks#object-filter-masks",
+                                  )}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline"
                                 >
-                                  {t(
-                                    "masksAndZones.objectMasks.desc.documentation",
-                                  )}{" "}
+                                  {t("readTheDocumentation", { ns: "common" })}
                                   <LuExternalLink className="ml-2 inline-flex size-3" />
                                 </Link>
                               </div>
@@ -718,7 +714,7 @@ export default function MasksAndZonesView({
                   hoveredPolygonIndex={hoveredPolygonIndex}
                   selectedZoneMask={selectedZoneMask}
                   activeLine={activeLine}
-                  snapPoints={true}
+                  snapPoints={snapPoints}
                 />
               ) : (
                 <Skeleton className="size-full" />

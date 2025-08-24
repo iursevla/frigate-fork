@@ -36,11 +36,12 @@ class JinaV1TextEmbedding(BaseEmbedding):
         requestor: InterProcessRequestor,
         device: str = "AUTO",
     ):
+        HF_ENDPOINT = os.environ.get("HF_ENDPOINT", "https://huggingface.co")
         super().__init__(
             model_name="jinaai/jina-clip-v1",
             model_file="text_model_fp16.onnx",
             download_urls={
-                "text_model_fp16.onnx": "https://huggingface.co/jinaai/jina-clip-v1/resolve/main/onnx/text_model_fp16.onnx",
+                "text_model_fp16.onnx": f"{HF_ENDPOINT}/jinaai/jina-clip-v1/resolve/main/onnx/text_model_fp16.onnx",
             },
         )
         self.tokenizer_file = "tokenizer"
@@ -127,7 +128,6 @@ class JinaV1TextEmbedding(BaseEmbedding):
             self.runner = ONNXModelRunner(
                 os.path.join(self.download_path, self.model_file),
                 self.device,
-                self.model_size,
             )
 
     def _preprocess_inputs(self, raw_inputs):
@@ -156,12 +156,13 @@ class JinaV1ImageEmbedding(BaseEmbedding):
             if model_size == "large"
             else "vision_model_quantized.onnx"
         )
+        HF_ENDPOINT = os.environ.get("HF_ENDPOINT", "https://huggingface.co")
         super().__init__(
             model_name="jinaai/jina-clip-v1",
             model_file=model_file,
             download_urls={
-                model_file: f"https://huggingface.co/jinaai/jina-clip-v1/resolve/main/onnx/{model_file}",
-                "preprocessor_config.json": "https://huggingface.co/jinaai/jina-clip-v1/resolve/main/preprocessor_config.json",
+                model_file: f"{HF_ENDPOINT}/jinaai/jina-clip-v1/resolve/main/onnx/{model_file}",
+                "preprocessor_config.json": f"{HF_ENDPOINT}/jinaai/jina-clip-v1/resolve/main/preprocessor_config.json",
             },
         )
         self.requestor = requestor
@@ -205,7 +206,6 @@ class JinaV1ImageEmbedding(BaseEmbedding):
             self.runner = ONNXModelRunner(
                 os.path.join(self.download_path, self.model_file),
                 self.device,
-                self.model_size,
             )
 
     def _preprocess_inputs(self, raw_inputs):

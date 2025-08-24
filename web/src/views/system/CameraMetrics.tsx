@@ -1,5 +1,5 @@
 import { useFrigateStats } from "@/api/ws";
-import { CameraLineGraph } from "@/components/graph/CameraGraph";
+import { CameraLineGraph } from "@/components/graph/LineGraph";
 import CameraInfoDialog from "@/components/overlay/CameraInfoDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FrigateConfig } from "@/types/frigateConfig";
@@ -32,7 +32,12 @@ export default function CameraMetrics({
   // stats
 
   const { data: initialStats } = useSWR<FrigateStats[]>(
-    ["stats/history", { keys: "cpu_usages,cameras,detection_fps,service" }],
+    [
+      "stats/history",
+      {
+        keys: "cpu_usages,cameras,camera_fps,detection_fps,skipped_fps,service",
+      },
+    ],
     {
       revalidateOnFocus: false,
     },
@@ -79,10 +84,16 @@ export default function CameraMetrics({
       [key: string]: { name: string; data: { x: number; y: number }[] };
     } = {};
 
-    series["overall_fps"] = { name: "overall frames per second", data: [] };
-    series["overall_dps"] = { name: "overall detections per second", data: [] };
+    series["overall_fps"] = {
+      name: t("cameras.label.overallFramesPerSecond"),
+      data: [],
+    };
+    series["overall_dps"] = {
+      name: t("cameras.label.overallDetectionsPerSecond"),
+      data: [],
+    };
     series["overall_skipped_dps"] = {
-      name: "overall skipped detections per second",
+      name: t("cameras.label.overallSkippedDetectionsPerSecond"),
       data: [],
     };
 
@@ -91,14 +102,9 @@ export default function CameraMetrics({
         return;
       }
 
-      let frames = 0;
-      Object.values(stats.cameras).forEach(
-        (camStat) => (frames += camStat.camera_fps),
-      );
-
       series["overall_fps"].data.push({
         x: statsIdx,
-        y: Math.round(frames),
+        y: stats.camera_fps,
       });
 
       series["overall_dps"].data.push({
@@ -106,18 +112,13 @@ export default function CameraMetrics({
         y: stats.detection_fps,
       });
 
-      let skipped = 0;
-      Object.values(stats.cameras).forEach(
-        (camStat) => (skipped += camStat.skipped_fps),
-      );
-
       series["overall_skipped_dps"].data.push({
         x: statsIdx,
-        y: skipped,
+        y: stats.skipped_fps,
       });
     });
     return Object.values(series);
-  }, [statsHistory]);
+  }, [statsHistory, t]);
 
   const cameraCpuSeries = useMemo(() => {
     if (!statsHistory || statsHistory.length == 0) {
@@ -143,9 +144,18 @@ export default function CameraMetrics({
         if (!(key in series)) {
           const camName = key.replaceAll("_", " ");
           series[key] = {};
-          series[key]["ffmpeg"] = { name: `${camName} ffmpeg`, data: [] };
-          series[key]["capture"] = { name: `${camName} capture`, data: [] };
-          series[key]["detect"] = { name: `${camName} detect`, data: [] };
+          series[key]["ffmpeg"] = {
+            name: t("cameras.label.cameraFfmpeg", { camName: camName }),
+            data: [],
+          };
+          series[key]["capture"] = {
+            name: t("cameras.label.cameraCapture", { camName: camName }),
+            data: [],
+          };
+          series[key]["detect"] = {
+            name: t("cameras.label.cameraDetect", { camName: camName }),
+            data: [],
+          };
         }
 
         series[key]["ffmpeg"].data.push({
@@ -158,12 +168,12 @@ export default function CameraMetrics({
         });
         series[key]["detect"].data.push({
           x: statsIdx,
-          y: stats.cpu_usages[camStats.pid.toString()].cpu,
+          y: stats.cpu_usages[camStats.pid?.toString()]?.cpu,
         });
       });
     });
     return series;
-  }, [config, statsHistory]);
+  }, [config, statsHistory, t]);
 
   const cameraFpsSeries = useMemo(() => {
     if (!statsHistory) {
@@ -186,15 +196,21 @@ export default function CameraMetrics({
           const camName = key.replaceAll("_", " ");
           series[key] = {};
           series[key]["fps"] = {
-            name: `${camName} frames per second`,
+            name: t("cameras.label.cameraFramesPerSecond", {
+              camName: camName,
+            }),
             data: [],
           };
           series[key]["det"] = {
-            name: `${camName} detections per second`,
+            name: t("cameras.label.cameraDetectionsPerSecond", {
+              camName: camName,
+            }),
             data: [],
           };
           series[key]["skip"] = {
-            name: `${camName} skipped detections per second`,
+            name: t("cameras.label.cameraSkippedDetectionsPerSecond", {
+              camName: camName,
+            }),
             data: [],
           };
         }
@@ -214,7 +230,7 @@ export default function CameraMetrics({
       });
     });
     return series;
-  }, [statsHistory]);
+  }, [statsHistory, t]);
 
   useEffect(() => {
     if (!showCameraInfoDialog) {
@@ -259,7 +275,7 @@ export default function CameraMetrics({
                   )}
                   <div className="flex w-full flex-col gap-3">
                     <div className="flex flex-row items-center justify-between">
-                      <div className="text-sm font-medium capitalize text-muted-foreground">
+                      <div className="text-sm font-medium text-muted-foreground smart-capitalize">
                         {camera.name.replaceAll("_", " ")}
                       </div>
                       <Tooltip>

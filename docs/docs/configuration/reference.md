@@ -73,21 +73,32 @@ tls:
   # Optional: Enable TLS for port 8971 (default: shown below)
   enabled: True
 
+# Optional: IPv6 configuration
+networking:
+  # Optional: Enable IPv6 on 5000, and 8971 if tls is configured (default: shown below)
+  ipv6:
+    enabled: False
+
 # Optional: Proxy configuration
 proxy:
   # Optional: Mapping for headers from upstream proxies. Only used if Frigate's auth
   # is disabled.
   # NOTE: Many authentication proxies pass a header downstream with the authenticated
-  #       user name. Not all values are supported. It must be a whitelisted header.
+  #       user name and role. Not all values are supported. It must be a whitelisted header.
   #       See the docs for more info.
   header_map:
     user: x-forwarded-user
+    role: x-forwarded-role
   # Optional: Url for logging out a user. This sets the location of the logout url in
   # the UI.
   logout_url: /api/logout
   # Optional: Auth secret that is checked against the X-Proxy-Secret header sent from
   # the proxy. If not set, all requests are trusted regardless of origin.
   auth_secret: None
+  # Optional: The default role to use for proxy auth. Must be "admin" or "viewer"
+  default_role: viewer
+  # Optional: The character used to separate multiple values in the proxy headers. (default: shown below)
+  separator: ","
 
 # Optional: Authentication configuration
 auth:
@@ -125,7 +136,7 @@ auth:
 # NOTE: The default values are for the EdgeTPU detector.
 # Other detectors will require the model config to be set.
 model:
-  # Required: path to the model (default: automatic based on detector)
+  # Required: path to the model. Frigate+ models use plus://<model_id> (default: automatic based on detector)
   path: /edgetpu_model.tflite
   # Required: path to the labelmap (default: shown below)
   labelmap_path: /labelmap.txt
@@ -334,6 +345,33 @@ objects:
       # Optional: mask to prevent this object type from being detected in certain areas (default: no mask)
       # Checks based on the bottom center of the bounding box of the object
       mask: 0.000,0.000,0.781,0.000,0.781,0.278,0.000,0.278
+  # Optional: Configuration for AI generated tracked object descriptions
+  genai:
+    # Optional: Enable AI object description generation (default: shown below)
+    enabled: False
+    # Optional: Use the object snapshot instead of thumbnails for description generation (default: shown below)
+    use_snapshot: False
+    # Optional: The default prompt for generating descriptions. Can use replacement
+    # variables like "label", "sub_label", "camera" to make more dynamic. (default: shown below)
+    prompt: "Describe the {label} in the sequence of images with as much detail as possible. Do not describe the background."
+    # Optional: Object specific prompts to customize description results
+    # Format: {label}: {prompt}
+    object_prompts:
+      person: "My special person prompt."
+    # Optional: objects to generate descriptions for (default: all objects that are tracked)
+    objects:
+      - person
+      - cat
+    # Optional: Restrict generation to objects that entered any of the listed zones (default: none, all zones qualify)
+    required_zones: []
+    # Optional: What triggers to use to send frames for a tracked object to generative AI (default: shown below)
+    send_triggers:
+      # Once the object is no longer tracked
+      tracked_object_end: True
+      # Optional: After X many significant updates are received (default: shown below)
+      after_significant_updates: None
+    # Optional: Save thumbnails sent to generative AI for review/debugging purposes (default: shown below)
+    debug_save_thumbnails: False
 
 # Optional: Review configuration
 # NOTE: Can be overridden at the camera level
@@ -366,6 +404,19 @@ review:
     #       should be configured at the camera level.
     required_zones:
       - driveway
+  # Optional: GenAI Review Summary Configuration
+  genai:
+    # Optional: Enable the GenAI review summary feature (default: shown below)
+    enabled: False
+    # Optional: Enable GenAI review summaries for alerts (default: shown below)
+    alerts: True
+    # Optional: Enable GenAI review summaries for detections (default: shown below)
+    detections: False
+    # Optional: Additional concerns that the GenAI should make note of (default: None)
+    additional_concerns:
+      - Animals in the garden
+    # Optional: Preferred response language (default: English)
+    preferred_language: English
 
 # Optional: Motion configuration
 # NOTE: Can be overridden at the camera level
@@ -433,20 +484,20 @@ record:
   # Optional: Number of minutes to wait between cleanup runs (default: shown below)
   # This can be used to reduce the frequency of deleting recording segments from disk if you want to minimize i/o
   expire_interval: 60
-  # Optional: Sync recordings with disk on startup and once a day (default: shown below).
+  # Optional: Two-way sync recordings database with disk on startup and once a day (default: shown below).
   sync_recordings: False
-  # Optional: Retention settings for recording
-  retain:
+  # Optional: Continuous retention settings
+  continuous:
+    # Optional: Number of days to retain recordings regardless of tracked objects or motion (default: shown below)
+    # NOTE: This should be set to 0 and retention should be defined in alerts and detections section below
+    #       if you only want to retain recordings of alerts and detections.
+    days: 0
+  # Optional: Motion retention settings
+  motion:
     # Optional: Number of days to retain recordings regardless of tracked objects (default: shown below)
     # NOTE: This should be set to 0 and retention should be defined in alerts and detections section below
     #       if you only want to retain recordings of alerts and detections.
     days: 0
-    # Optional: Mode for retention. Available options are: all, motion, and active_objects
-    #   all - save all recording segments regardless of activity
-    #   motion - save all recordings segments with any detected motion
-    #   active_objects - save all recording segments with active/moving objects
-    # NOTE: this mode only applies when the days setting above is greater than 0
-    mode: all
   # Optional: Recording Export Settings
   export:
     # Optional: Timelapse Output Args (default: shown below).
@@ -541,14 +592,17 @@ semantic_search:
   # Optional: Set the model size used for embeddings. (default: shown below)
   # NOTE: small model runs on CPU and large model runs on GPU
   model_size: "small"
+  # Optional: Target a specific device to run the model (default: shown below)
+  # NOTE: See https://onnxruntime.ai/docs/execution-providers/ for more information
+  device: None
 
 # Optional: Configuration for face recognition capability
-# NOTE: Can (enabled, min_area) be overridden at the camera level
+# NOTE: enabled, min_area can be overridden at the camera level
 face_recognition:
-  # Optional: Enable semantic search (default: shown below)
+  # Optional: Enable face recognition (default: shown below)
   enabled: False
-  # Optional: Minimum face distance score required to save the attempt (default: shown below)
-  min_score: 0.8
+  # Optional: Minimum face distance score required to mark as a potential match (default: shown below)
+  unknown_score: 0.8
   # Optional: Minimum face detection score required to detect a face (default: shown below)
   # NOTE: This only applies when not running a Frigate+ model
   detection_threshold: 0.7
@@ -556,16 +610,28 @@ face_recognition:
   recognition_threshold: 0.9
   # Optional: Min area of detected face box to consider running face recognition (default: shown below)
   min_area: 500
-  # Optional: Save images of recognized faces for training (default: shown below)
-  save_attempts: True
+  # Optional: Min face recognitions for the sub label to be applied to the person object (default: shown below)
+  min_faces: 1
+  # Optional: Number of images of recognized faces to save for training (default: shown below)
+  save_attempts: 100
   # Optional: Apply a blur quality filter to adjust confidence based on the blur level of the image (default: shown below)
   blur_confidence_filter: True
+  # Optional: Set the model size used face recognition. (default: shown below)
+  model_size: small
+  # Optional: Target a specific device to run the model (default: shown below)
+  # NOTE: See https://onnxruntime.ai/docs/execution-providers/ for more information
+  device: None
 
 # Optional: Configuration for license plate recognition capability
-# NOTE: enabled and min_area can be overridden at the camera level
+# NOTE: enabled, min_area, and enhancement can be overridden at the camera level
 lpr:
   # Optional: Enable license plate recognition (default: shown below)
   enabled: False
+  # Optional: The device to run the models on (default: shown below)
+  # NOTE: See https://onnxruntime.ai/docs/execution-providers/ for more information
+  device: CPU
+  # Optional: Set the model size used for text detection. (default: shown below)
+  model_size: small
   # Optional: License plate object confidence score required to begin running recognition (default: shown below)
   detection_threshold: 0.7
   # Optional: Minimum area of license plate to begin running recognition (default: shown below)
@@ -580,6 +646,11 @@ lpr:
   match_distance: 1
   # Optional: Known plates to track (strings or regular expressions) (default: shown below)
   known_plates: {}
+  # Optional: Enhance the detected plate image with contrast adjustment and denoising (default: shown below)
+  # A value between 0 and 10. Higher values are not always better and may perform worse than lower values.
+  enhancement: 0
+  # Optional: Save plate images to /media/frigate/clips/lpr for debugging purposes (default: shown below)
+  debug_save_plates: False
 
 # Optional: Configuration for AI generated tracked object descriptions
 # WARNING: Depending on the provider, this will send thumbnails over the internet
@@ -594,13 +665,24 @@ genai:
   base_url: http://localhost::11434
   # Required if gemini or openai
   api_key: "{FRIGATE_GENAI_API_KEY}"
-  # Optional: The default prompt for generating descriptions. Can use replacement
-  # variables like "label", "sub_label", "camera" to make more dynamic. (default: shown below)
-  prompt: "Describe the {label} in the sequence of images with as much detail as possible. Do not describe the background."
-  # Optional: Object specific prompts to customize description results
-  # Format: {label}: {prompt}
-  object_prompts:
-    person: "My special person prompt."
+  # Required if enabled: The model to use with the provider.
+  model: gemini-1.5-flash
+  # Optional additional args to pass to the GenAI Provider (default: None)
+  provider_options:
+    keep_alive: -1
+
+# Optional: Configuration for audio transcription
+# NOTE: only the enabled option can be overridden at the camera level
+audio_transcription:
+  # Optional: Enable license plate recognition (default: shown below)
+  enabled: False
+  # Optional: The device to run the models on (default: shown below)
+  device: CPU
+  # Optional: Set the model size used for transcription. (default: shown below)
+  model_size: small
+  # Optional: Set the language used for transcription translation. (default: shown below)
+  # List of language codes: https://github.com/openai/whisper/blob/main/whisper/tokenizer.py#L10
+  language: en
 
 # Optional: Restream configuration
 # Uses https://github.com/AlexxIT/go2rtc (v1.9.9)
@@ -809,33 +891,22 @@ cameras:
       # By default the cameras are sorted alphabetically.
       order: 0
 
-    # Optional: Configuration for AI generated tracked object descriptions
-    genai:
-      # Optional: Enable AI description generation (default: shown below)
-      enabled: False
-      # Optional: Use the object snapshot instead of thumbnails for description generation (default: shown below)
-      use_snapshot: False
-      # Optional: The default prompt for generating descriptions. Can use replacement
-      # variables like "label", "sub_label", "camera" to make more dynamic. (default: shown below)
-      prompt: "Describe the {label} in the sequence of images with as much detail as possible. Do not describe the background."
-      # Optional: Object specific prompts to customize description results
-      # Format: {label}: {prompt}
-      object_prompts:
-        person: "My special person prompt."
-      # Optional: objects to generate descriptions for (default: all objects that are tracked)
-      objects:
-        - person
-        - cat
-      # Optional: Restrict generation to objects that entered any of the listed zones (default: none, all zones qualify)
-      required_zones: []
-      # Optional: What triggers to use to send frames for a tracked object to generative AI (default: shown below)
-      send_triggers:
-        # Once the object is no longer tracked
-        tracked_object_end: True
-        # Optional: After X many significant updates are received (default: shown below)
-        after_significant_updates: None
-      # Optional: Save thumbnails sent to generative AI for review/debugging purposes (default: shown below)
-      debug_save_thumbnails: False
+    # Optional: Configuration for triggers to automate actions based on semantic search results.
+    triggers:
+      # Required: Unique identifier for the trigger (generated automatically from nickname if not specified).
+      trigger_name:
+        # Required: Enable or disable the trigger. (default: shown below)
+        enabled: true
+        # Type of trigger, either `thumbnail` for image-based matching or `description` for text-based matching. (default: none)
+        type: thumbnail
+        # Reference data for matching, either an event ID for `thumbnail` or a text string for `description`. (default: none)
+        data: 1751565549.853251-b69j73
+        # Similarity threshold for triggering. (default: none)
+        threshold: 0.7
+        # List of actions to perform when the trigger fires. (default: none)
+        # Available options: `notification` (send a webpush notification)
+        actions:
+          - notification
 
 # Optional
 ui:
@@ -885,7 +956,7 @@ telemetry:
     # Optional: Enable Intel GPU stats (default: shown below)
     intel_gpu_stats: True
     # Optional: Treat GPU as SR-IOV to fix GPU stats (default: shown below)
-    sriov: False
+    intel_gpu_device: None
     # Optional: Enable network bandwidth stats monitoring for camera ffmpeg processes, go2rtc, and object detectors. (default: shown below)
     # NOTE: The container must either be privileged or have cap_net_admin, cap_net_raw capabilities enabled.
     network_bandwidth: False

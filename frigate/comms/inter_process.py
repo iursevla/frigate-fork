@@ -1,13 +1,16 @@
 """Facilitates communication between processes."""
 
+import logging
 import multiprocessing as mp
 import threading
 from multiprocessing.synchronize import Event as MpEvent
-from typing import Callable
+from typing import Any, Callable
 
 import zmq
 
 from frigate.comms.base_communicator import Communicator
+
+logger = logging.getLogger(__name__)
 
 SOCKET_REP_REQ = "ipc:///tmp/cache/comms"
 
@@ -19,7 +22,7 @@ class InterProcessCommunicator(Communicator):
         self.socket.bind(SOCKET_REP_REQ)
         self.stop_event: MpEvent = mp.Event()
 
-    def publish(self, topic: str, payload: str, retain: bool) -> None:
+    def publish(self, topic: str, payload: Any, retain: bool = False) -> None:
         """There is no communication back to the processes."""
         pass
 
@@ -37,9 +40,16 @@ class InterProcessCommunicator(Communicator):
                     break
 
                 try:
-                    (topic, value) = self.socket.recv_json(flags=zmq.NOBLOCK)
+                    raw = self.socket.recv_json(flags=zmq.NOBLOCK)
 
-                    response = self._dispatcher(topic, value)
+                    if isinstance(raw, list):
+                        (topic, value) = raw
+                        response = self._dispatcher(topic, value)
+                    else:
+                        logging.warning(
+                            f"Received unexpected data type in ZMQ recv_json: {type(raw)}"
+                        )
+                        response = None
 
                     if response is not None:
                         self.socket.send_json(response)
@@ -63,7 +73,7 @@ class InterProcessRequestor:
         self.socket = self.context.socket(zmq.REQ)
         self.socket.connect(SOCKET_REP_REQ)
 
-    def send_data(self, topic: str, data: any) -> any:
+    def send_data(self, topic: str, data: Any) -> Any:
         """Sends data and then waits for reply."""
         try:
             self.socket.send_json((topic, data))
