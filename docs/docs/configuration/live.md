@@ -23,7 +23,7 @@ If you are using go2rtc, you should adjust the following settings in your camera
 
 - Video codec: **H.264** - provides the most compatible video codec with all Live view technologies and browsers. Avoid any kind of "smart codec" or "+" codec like _H.264+_ or _H.265+_. as these non-standard codecs remove keyframes (see below).
 - Audio codec: **AAC** - provides the most compatible audio codec with all Live view technologies and browsers that support audio.
-- I-frame interval (sometimes called the keyframe interval, the interframe space, or the GOP length): match your camera's frame rate, or choose "1x" (for interframe space on Reolink cameras). For example, if your stream outputs 20fps, your i-frame interval should be 20 (or 1x on Reolink). Values higher than the frame rate will cause the stream to take longer to begin playback. See [this page](https://gardinal.net/understanding-the-keyframe-interval/) for more on keyframes. For many users this may not be an issue, but it should be noted that that a 1x i-frame interval will cause more storage utilization if you are using the stream for the `record` role as well.
+- I-frame interval (sometimes called the keyframe interval, the interframe space, or the GOP length): match your camera's frame rate, or choose "1x" (for interframe space on Reolink cameras). For example, if your stream outputs 20fps, your i-frame interval should be 20 (or 1x on Reolink). Values higher than the frame rate will cause the stream to take longer to begin playback. See [this page](https://gardinal.net/understanding-the-keyframe-interval/) for more on keyframes. For many users this may not be an issue, but it should be noted that a 1x i-frame interval will cause more storage utilization if you are using the stream for the `record` role as well.
 
 The default video and audio codec on your camera may not always be compatible with your browser, which is why setting them to H.264 and AAC is recommended. See the [go2rtc docs](https://github.com/AlexxIT/go2rtc?tab=readme-ov-file#codecs-madness) for codec support information.
 
@@ -40,6 +40,16 @@ go2rtc:
     http_cam: # <- for http streams
       - http://192.168.50.155/flv?port=1935&app=bcs&stream=channel0_main.bcs&user=user&password=password # <- stream which supports video & aac audio
       - "ffmpeg:http_cam#audio=opus" # <- copy of the stream which transcodes audio to the missing codec (usually will be opus)
+```
+
+If your camera does not support AAC audio or are having problems with Live view, try transcoding to AAC audio directly:
+
+```yaml
+go2rtc:
+  streams:
+    rtsp_cam: # <- for RTSP streams
+      - "ffmpeg:rtsp://192.168.1.5:554/live0#video=copy#audio=aac" # <- copies video stream and transcodes to aac audio
+      - "ffmpeg:rtsp_cam#audio=opus" # <- provides support for WebRTC
 ```
 
 If your camera does not have audio and you are having problems with Live view, you should have go2rtc send video only:
@@ -162,7 +172,7 @@ For devices that support two way talk, Frigate can be configured to use the feat
 
 - Set up go2rtc with [WebRTC](#webrtc-extra-configuration).
 - Ensure you access Frigate via https (may require [opening port 8971](/frigate/installation/#ports)).
-- For the Home Assistant Frigate card, [follow the docs](https://github.com/dermotduffy/frigate-hass-card?tab=readme-ov-file#using-2-way-audio) for the correct source.
+- For the Home Assistant Frigate card, [follow the docs](http://card.camera/#/usage/2-way-audio) for the correct source.
 
 To use the Reolink Doorbell with two way talk, you should use the [recommended Reolink configuration](/configuration/camera_specific#reolink-doorbell)
 
@@ -179,13 +189,24 @@ Frigate provides a dialog in the Camera Group Edit pane with several options for
 
 :::note
 
-The default dashboard ("All Cameras") will always use Smart Streaming and the first entry set in your `streams` configuration, if defined. Use a camera group if you want to change any of these settings from the defaults.
+The default dashboard ("All Cameras") will always use:
+
+- Smart Streaming, unless you've disabled the global Automatic Live View in Settings.
+- The first entry set in your `streams` configuration, if defined.
+
+Use a camera group if you want to change any of these settings from the defaults.
 
 :::
 
 ### Disabling cameras
 
 Cameras can be temporarily disabled through the Frigate UI and through [MQTT](/integrations/mqtt#frigatecamera_nameenabledset) to conserve system resources. When disabled, Frigate's ffmpeg processes are terminated — recording stops, object detection is paused, and the Live dashboard displays a blank image with a disabled message. Review items, tracked objects, and historical footage for disabled cameras can still be accessed via the UI.
+
+:::note
+
+Disabling a camera via the Frigate UI or MQTT is temporary and does not persist through restarts of Frigate.
+
+:::
 
 For restreamed cameras, go2rtc remains active but does not use system resources for decoding or processing unless there are active external consumers (such as the Advanced Camera Card in Home Assistant using a go2rtc source).
 

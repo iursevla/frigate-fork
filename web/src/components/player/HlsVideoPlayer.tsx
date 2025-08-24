@@ -28,16 +28,22 @@ const unsupportedErrorCodes = [
   MediaError.MEDIA_ERR_DECODE,
 ];
 
+export interface HlsSource {
+  playlist: string;
+  startPosition?: number;
+}
+
 type HlsVideoPlayerProps = {
   videoRef: MutableRefObject<HTMLVideoElement | null>;
   containerRef?: React.MutableRefObject<HTMLDivElement | null>;
   visible: boolean;
-  currentSource: string;
+  currentSource: HlsSource;
   hotKeys: boolean;
   supportsFullscreen: boolean;
   fullscreen: boolean;
   frigateControls?: boolean;
-  onClipEnded?: () => void;
+  inpointOffset?: number;
+  onClipEnded?: (currentTime: number) => void;
   onPlayerLoaded?: () => void;
   onTimeUpdate?: (time: number) => void;
   onPlaying?: () => void;
@@ -55,6 +61,7 @@ export default function HlsVideoPlayer({
   supportsFullscreen,
   fullscreen,
   frigateControls = true,
+  inpointOffset = 0,
   onClipEnded,
   onPlayerLoaded,
   onTimeUpdate,
@@ -111,17 +118,25 @@ export default function HlsVideoPlayer({
     const currentPlaybackRate = videoRef.current.playbackRate;
 
     if (!useHlsCompat) {
-      videoRef.current.src = currentSource;
+      videoRef.current.src = currentSource.playlist;
       videoRef.current.load();
       return;
     }
 
-    if (!hlsRef.current) {
-      hlsRef.current = new Hls();
-      hlsRef.current.attachMedia(videoRef.current);
+    // we must destroy the hlsRef every time the source changes
+    // so that we can create a new HLS instance with startPosition
+    // set at the optimal point in time
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
     }
 
-    hlsRef.current.loadSource(currentSource);
+    hlsRef.current = new Hls({
+      maxBufferLength: 10,
+      maxBufferSize: 20 * 1000 * 1000,
+      startPosition: currentSource.startPosition,
+    });
+    hlsRef.current.attachMedia(videoRef.current);
+    hlsRef.current.loadSource(currentSource.playlist);
     videoRef.current.playbackRate = currentPlaybackRate;
   }, [videoRef, hlsRef, useHlsCompat, currentSource]);
 
@@ -187,6 +202,16 @@ export default function HlsVideoPlayer({
     };
   }, [videoRef, controlsOpen]);
 
+  const getVideoTime = useCallback(() => {
+    const currentTime = videoRef.current?.currentTime;
+
+    if (!currentTime) {
+      return undefined;
+    }
+
+    return currentTime + inpointOffset;
+  }, [videoRef, inpointOffset]);
+
   return (
     <TransformWrapper
       minScale={1.0}
@@ -234,8 +259,10 @@ export default function HlsVideoPlayer({
             }
           }}
           onUploadFrame={async () => {
-            if (videoRef.current && onUploadFrame) {
-              const resp = await onUploadFrame(videoRef.current.currentTime);
+            const frameTime = getVideoTime();
+
+            if (frameTime && onUploadFrame) {
+              const resp = await onUploadFrame(frameTime);
 
               if (resp && resp.status == 200) {
                 toast.success(t("toast.success.submittedFrigatePlus"), {
@@ -335,11 +362,17 @@ export default function HlsVideoPlayer({
               }
             }
           }}
-          onTimeUpdate={() =>
-            onTimeUpdate && videoRef.current
-              ? onTimeUpdate(videoRef.current.currentTime)
-              : undefined
-          }
+          onTimeUpdate={() => {
+            if (!onTimeUpdate) {
+              return;
+            }
+
+            const frameTime = getVideoTime();
+
+            if (frameTime) {
+              onTimeUpdate(frameTime);
+            }
+          }}
           onLoadedData={() => {
             onPlayerLoaded?.();
             handleLoadedMetadata();
@@ -354,7 +387,11 @@ export default function HlsVideoPlayer({
               }
             }
           }}
-          onEnded={onClipEnded}
+          onEnded={() => {
+            if (onClipEnded) {
+              onClipEnded(getVideoTime() ?? 0);
+            }
+          }}
           onError={(e) => {
             if (
               !hlsRef.current &&

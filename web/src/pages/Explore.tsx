@@ -22,13 +22,24 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
+import { useDocDomain } from "@/hooks/use-doc-domain";
 
 const API_LIMIT = 25;
+
+// always parse these as string arrays
+const SEARCH_FILTER_ARRAY_KEYS = [
+  "cameras",
+  "labels",
+  "sub_labels",
+  "recognized_license_plate",
+  "zones",
+];
 
 export default function Explore() {
   // search field handler
 
   const { t } = useTranslation(["views/explore"]);
+  const { getLocaleDocUrl } = useDocDomain();
 
   const { data: config } = useSWR<FrigateConfig>("config", {
     revalidateOnFocus: false,
@@ -56,7 +67,7 @@ export default function Explore() {
   const [search, setSearch] = useState("");
 
   const [searchFilter, setSearchFilter, searchSearchParams] =
-    useApiFilterArgs<SearchFilter>();
+    useApiFilterArgs<SearchFilter>(SEARCH_FILTER_ARRAY_KEYS);
 
   const searchTerm = useMemo(
     () => searchSearchParams?.["query"] || "",
@@ -127,7 +138,6 @@ export default function Explore() {
           limit:
             Object.keys(searchSearchParams).length == 0 ? API_LIMIT : undefined,
           timezone,
-          in_progress: 0,
           include_thumbnails: 0,
         },
       ];
@@ -247,15 +257,13 @@ export default function Explore() {
 
   // mutation and revalidation
 
-  const trackedObjectUpdate = useTrackedObjectUpdate();
+  const { payload: wsUpdate } = useTrackedObjectUpdate();
 
   useEffect(() => {
-    if (trackedObjectUpdate) {
+    if (wsUpdate && wsUpdate.type == "description") {
       mutate();
     }
-    // mutate / revalidate when event description updates come in
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackedObjectUpdate]);
+  }, [wsUpdate, mutate]);
 
   // embeddings reindex progress
 
@@ -399,19 +407,25 @@ export default function Explore() {
                   )}
                   <div className="flex flex-row items-center justify-center gap-3">
                     <span className="text-primary-variant">
-                      t("exploreIsUnavailable.embeddingsReindexing.step.thumbnailsEmbedded")
+                      {t(
+                        "exploreIsUnavailable.embeddingsReindexing.step.thumbnailsEmbedded",
+                      )}
                     </span>
                     {reindexState.thumbnails}
                   </div>
                   <div className="flex flex-row items-center justify-center gap-3">
                     <span className="text-primary-variant">
-                      t("exploreIsUnavailable.embeddingsReindexing.step.descriptionsEmbedded")
+                      {t(
+                        "exploreIsUnavailable.embeddingsReindexing.step.descriptionsEmbedded",
+                      )}
                     </span>
                     {reindexState.descriptions}
                   </div>
                   <div className="flex flex-row items-center justify-center gap-3">
                     <span className="text-primary-variant">
-                      t("exploreIsUnavailable.embeddingsReindexing.step.trackedObjectsProcessed")
+                      {t(
+                        "exploreIsUnavailable.embeddingsReindexing.step.trackedObjectsProcessed",
+                      )}
                     </span>
                     {reindexState.processed_objects} /{" "}
                     {reindexState.total_objects}
@@ -463,14 +477,12 @@ export default function Explore() {
                 </div>
                 <div className="flex items-center text-primary-variant">
                   <Link
-                    to="https://docs.frigate.video/configuration/semantic_search"
+                    to={getLocaleDocUrl("configuration/semantic_search")}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline"
                   >
-                    {t(
-                      "exploreIsUnavailable.downloadingModels.tips.documentation",
-                    )}{" "}
+                    {t("readTheDocumentation", { ns: "common" })}
                     <LuExternalLink className="ml-2 inline-flex size-3" />
                   </Link>
                 </div>

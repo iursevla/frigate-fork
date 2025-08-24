@@ -48,12 +48,13 @@ from .camera.genai import GenAIConfig
 from .camera.motion import MotionConfig
 from .camera.notification import NotificationConfig
 from .camera.objects import FilterConfig, ObjectConfig
-from .camera.record import RecordConfig, RetainModeEnum
+from .camera.record import RecordConfig
 from .camera.review import ReviewConfig
 from .camera.snapshots import SnapshotsConfig
 from .camera.timestamp import TimestampStyleConfig
 from .camera_group import CameraGroupConfig
 from .classification import (
+    AudioTranscriptionConfig,
     ClassificationConfig,
     FaceRecognitionConfig,
     LicensePlateRecognitionConfig,
@@ -63,6 +64,7 @@ from .database import DatabaseConfig
 from .env import EnvVars
 from .logger import LoggerConfig
 from .mqtt import MqttConfig
+from .network import NetworkingConfig
 from .proxy import ProxyConfig
 from .telemetry import TelemetryConfig
 from .tls import TlsConfig
@@ -203,33 +205,6 @@ def verify_valid_live_stream_names(
             )
 
 
-def verify_recording_retention(camera_config: CameraConfig) -> None:
-    """Verify that recording retention modes are ranked correctly."""
-    rank_map = {
-        RetainModeEnum.all: 0,
-        RetainModeEnum.motion: 1,
-        RetainModeEnum.active_objects: 2,
-    }
-
-    if (
-        camera_config.record.retain.days != 0
-        and rank_map[camera_config.record.retain.mode]
-        > rank_map[camera_config.record.alerts.retain.mode]
-    ):
-        logger.warning(
-            f"{camera_config.name}: Recording retention is configured for {camera_config.record.retain.mode} and alert retention is configured for {camera_config.record.alerts.retain.mode}. The more restrictive retention policy will be applied."
-        )
-
-    if (
-        camera_config.record.retain.days != 0
-        and rank_map[camera_config.record.retain.mode]
-        > rank_map[camera_config.record.detections.retain.mode]
-    ):
-        logger.warning(
-            f"{camera_config.name}: Recording retention is configured for {camera_config.record.retain.mode} and detection retention is configured for {camera_config.record.detections.retain.mode}. The more restrictive retention policy will be applied."
-        )
-
-
 def verify_recording_segments_setup_with_reasonable_time(
     camera_config: CameraConfig,
 ) -> None:
@@ -292,15 +267,51 @@ def verify_autotrack_zones(camera_config: CameraConfig) -> ValueError | None:
 
 
 def verify_motion_and_detect(camera_config: CameraConfig) -> ValueError | None:
-    """Verify that required_zones are specified when autotracking is enabled."""
+    """Verify that motion detection is not disabled and object detection is enabled."""
     if camera_config.detect.enabled and not camera_config.motion.enabled:
         raise ValueError(
             f"Camera {camera_config.name} has motion detection disabled and object detection enabled but object detection requires motion detection."
         )
 
 
+def verify_objects_track(
+    camera_config: CameraConfig, enabled_objects: list[str]
+) -> None:
+    """Verify that a user has not specified an object to track that is not in the labelmap."""
+    valid_objects = [
+        obj for obj in camera_config.objects.track if obj in enabled_objects
+    ]
+
+    if len(valid_objects) != len(camera_config.objects.track):
+        invalid_objects = set(camera_config.objects.track) - set(valid_objects)
+        logger.warning(
+            f"{camera_config.name} is configured to track {list(invalid_objects)} objects, which are not supported by the current model."
+        )
+        camera_config.objects.track = valid_objects
+
+
+def verify_lpr_and_face(
+    frigate_config: FrigateConfig, camera_config: CameraConfig
+) -> ValueError | None:
+    """Verify that lpr and face are enabled at the global level if enabled at the camera level."""
+    if camera_config.lpr.enabled and not frigate_config.lpr.enabled:
+        raise ValueError(
+            f"Camera {camera_config.name} has lpr enabled but lpr is disabled at the global level of the config. You must enable lpr at the global level."
+        )
+    if (
+        camera_config.face_recognition.enabled
+        and not frigate_config.face_recognition.enabled
+    ):
+        raise ValueError(
+            f"Camera {camera_config.name} has face_recognition enabled but face_recognition is disabled at the global level of the config. You must enable face_recognition at the global level."
+        )
+
+
 class FrigateConfig(FrigateBaseModel):
     version: Optional[str] = Field(default=None, title="Current config version.")
+    safe_mode: bool = Field(
+        default=False, title="If Frigate should be started in safe mode."
+    )
 
     # Fields that install global state should be defined first, so that their validators run first.
     environment_vars: EnvVars = Field(
@@ -324,6 +335,9 @@ class FrigateConfig(FrigateBaseModel):
     notifications: NotificationConfig = Field(
         default_factory=NotificationConfig, title="Global notification configuration."
     )
+    networking: NetworkingConfig = Field(
+        default_factory=NetworkingConfig, title="Networking configuration"
+    )
     proxy: ProxyConfig = Field(
         default_factory=ProxyConfig, title="Proxy configuration."
     )
@@ -342,6 +356,11 @@ class FrigateConfig(FrigateBaseModel):
         default_factory=ModelConfig, title="Detection model configuration."
     )
 
+    # GenAI config
+    genai: GenAIConfig = Field(
+        default_factory=GenAIConfig, title="Generative AI configuration."
+    )
+
     # Camera config
     cameras: Dict[str, CameraConfig] = Field(title="Camera configuration.")
     audio: AudioConfig = Field(
@@ -355,9 +374,6 @@ class FrigateConfig(FrigateBaseModel):
     )
     ffmpeg: FfmpegConfig = Field(
         default_factory=FfmpegConfig, title="Global FFmpeg configuration."
-    )
-    genai: GenAIConfig = Field(
-        default_factory=GenAIConfig, title="Generative AI configuration."
     )
     live: CameraLiveConfig = Field(
         default_factory=CameraLiveConfig, title="Live playback settings."
@@ -383,6 +399,9 @@ class FrigateConfig(FrigateBaseModel):
     )
 
     # Classification Config
+    audio_transcription: AudioTranscriptionConfig = Field(
+        default_factory=AudioTranscriptionConfig, title="Audio transcription config."
+    )
     classification: ClassificationConfig = Field(
         default_factory=ClassificationConfig, title="Object classification config."
     )
@@ -436,6 +455,7 @@ class FrigateConfig(FrigateBaseModel):
         global_config = self.model_dump(
             include={
                 "audio": ...,
+                "audio_transcription": ...,
                 "birdseye": ...,
                 "face_recognition": ...,
                 "lpr": ...,
@@ -444,7 +464,6 @@ class FrigateConfig(FrigateBaseModel):
                 "live": ...,
                 "objects": ...,
                 "review": ...,
-                "genai": ...,
                 "motion": ...,
                 "notifications": ...,
                 "detect": ...,
@@ -454,9 +473,59 @@ class FrigateConfig(FrigateBaseModel):
             exclude_unset=True,
         )
 
+        for key, detector in self.detectors.items():
+            adapter = TypeAdapter(DetectorConfig)
+            model_dict = (
+                detector
+                if isinstance(detector, dict)
+                else detector.model_dump(warnings="none")
+            )
+            detector_config: BaseDetectorConfig = adapter.validate_python(model_dict)
+
+            # users should not set model themselves
+            if detector_config.model:
+                detector_config.model = None
+
+            model_config = self.model.model_dump(exclude_unset=True, warnings="none")
+
+            if detector_config.model_path:
+                model_config["path"] = detector_config.model_path
+
+            if "path" not in model_config:
+                if detector_config.type == "cpu" or detector_config.type.endswith(
+                    "_tfl"
+                ):
+                    model_config["path"] = "/cpu_model.tflite"
+                elif detector_config.type == "edgetpu":
+                    model_config["path"] = "/edgetpu_model.tflite"
+
+            model = ModelConfig.model_validate(model_config)
+            model.check_and_load_plus_model(self.plus_api, detector_config.type)
+            model.compute_model_hash()
+            labelmap_objects = model.merged_labelmap.values()
+            detector_config.model = model
+            self.detectors[key] = detector_config
+
         for name, camera in self.cameras.items():
+            modified_global_config = global_config.copy()
+
+            # only populate some fields down to the camera level for specific keys
+            allowed_fields_map = {
+                "face_recognition": ["enabled", "min_area"],
+                "lpr": ["enabled", "expire_time", "min_area", "enhancement"],
+                "audio_transcription": ["enabled", "live_enabled"],
+            }
+
+            for section in allowed_fields_map:
+                if section in modified_global_config:
+                    modified_global_config[section] = {
+                        k: v
+                        for k, v in modified_global_config[section].items()
+                        if k in allowed_fields_map[section]
+                    }
+
             merged_config = deep_merge(
-                camera.model_dump(exclude_unset=True), global_config
+                camera.model_dump(exclude_unset=True), modified_global_config
             )
             camera_config: CameraConfig = CameraConfig.model_validate(
                 {"name": name, **merged_config}
@@ -496,9 +565,13 @@ class FrigateConfig(FrigateBaseModel):
                     )
 
             # Warn if detect fps > 10
-            if camera_config.detect.fps > 10:
+            if camera_config.detect.fps > 10 and camera_config.type != "lpr":
                 logger.warning(
                     f"{camera_config.name} detect fps is set to {camera_config.detect.fps}. This does NOT need to match your camera's frame rate. High values could lead to reduced performance. Recommended value is 5."
+                )
+            if camera_config.detect.fps > 15 and camera_config.type == "lpr":
+                logger.warning(
+                    f"{camera_config.name} detect fps is set to {camera_config.detect.fps}. This does NOT need to match your camera's frame rate. High values could lead to reduced performance. Recommended value for LPR cameras are between 5-15."
                 )
 
             # Default min_initialized configuration
@@ -522,6 +595,9 @@ class FrigateConfig(FrigateBaseModel):
             # set config pre-value
             camera_config.enabled_in_config = camera_config.enabled
             camera_config.audio.enabled_in_config = camera_config.audio.enabled
+            camera_config.audio_transcription.enabled_in_config = (
+                camera_config.audio_transcription.enabled
+            )
             camera_config.record.enabled_in_config = camera_config.record.enabled
             camera_config.notifications.enabled_in_config = (
                 camera_config.notifications.enabled
@@ -534,6 +610,12 @@ class FrigateConfig(FrigateBaseModel):
             )
             camera_config.review.detections.enabled_in_config = (
                 camera_config.review.detections.enabled
+            )
+            camera_config.objects.genai.enabled_in_config = (
+                camera_config.objects.genai.enabled
+            )
+            camera_config.review.genai.enabled_in_config = (
+                camera_config.review.genai.enabled
             )
 
             # Add default filters
@@ -601,51 +683,41 @@ class FrigateConfig(FrigateBaseModel):
 
             verify_config_roles(camera_config)
             verify_valid_live_stream_names(self, camera_config)
-            verify_recording_retention(camera_config)
             verify_recording_segments_setup_with_reasonable_time(camera_config)
             verify_zone_objects_are_tracked(camera_config)
             verify_required_zones_exist(camera_config)
             verify_autotrack_zones(camera_config)
             verify_motion_and_detect(camera_config)
+            verify_objects_track(camera_config, labelmap_objects)
+            verify_lpr_and_face(self, camera_config)
+
+        # set names on classification configs
+        for name, config in self.classification.custom.items():
+            config.name = name
 
         self.objects.parse_all_objects(self.cameras)
         self.model.create_colormap(sorted(self.objects.all_objects))
         self.model.check_and_load_plus_model(self.plus_api)
 
+        # Check audio transcription and audio detection requirements
+        if self.audio_transcription.enabled:
+            # If audio transcription is enabled globally, at least one camera must have audio detection enabled
+            if not any(camera.audio.enabled for camera in self.cameras.values()):
+                raise ValueError(
+                    "Audio transcription is enabled globally, but no cameras have audio detection enabled. At least one camera must have audio detection enabled."
+                )
+        else:
+            # If audio transcription is disabled globally, check each camera with audio_transcription enabled
+            for camera in self.cameras.values():
+                if camera.audio_transcription.enabled and not camera.audio.enabled:
+                    raise ValueError(
+                        f"Camera {camera.name} has audio transcription enabled, but audio detection is not enabled for this camera. Audio detection must be enabled for cameras with audio transcription when it is disabled globally."
+                    )
+
         if self.plus_api and not self.snapshots.clean_copy:
             logger.warning(
                 "Frigate+ is configured but clean snapshots are not enabled, submissions to Frigate+ will not be possible./"
             )
-
-        for key, detector in self.detectors.items():
-            adapter = TypeAdapter(DetectorConfig)
-            model_dict = (
-                detector
-                if isinstance(detector, dict)
-                else detector.model_dump(warnings="none")
-            )
-            detector_config: BaseDetectorConfig = adapter.validate_python(model_dict)
-
-            # users should not set model themselves
-            if detector_config.model:
-                detector_config.model = None
-
-            model_config = self.model.model_dump(exclude_unset=True, warnings="none")
-
-            if detector_config.model_path:
-                model_config["path"] = detector_config.model_path
-
-            if "path" not in model_config:
-                if detector_config.type == "cpu":
-                    model_config["path"] = "/cpu_model.tflite"
-                elif detector_config.type == "edgetpu":
-                    model_config["path"] = "/edgetpu_model.tflite"
-
-            model = ModelConfig.model_validate(model_config)
-            model.check_and_load_plus_model(self.plus_api, detector_config.type)
-            model.compute_model_hash()
-            detector_config.model = model
-            self.detectors[key] = detector_config
 
         return self
 
@@ -660,6 +732,7 @@ class FrigateConfig(FrigateBaseModel):
 
     @classmethod
     def load(cls, **kwargs):
+        """Loads the Frigate config file, runs migrations, and creates the config object."""
         config_path = find_config_file()
 
         # No configuration file found, create one.
@@ -687,7 +760,7 @@ class FrigateConfig(FrigateBaseModel):
             return FrigateConfig.parse(f, **kwargs)
 
     @classmethod
-    def parse(cls, config, *, is_json=None, **context):
+    def parse(cls, config, *, is_json=None, safe_load=False, **context):
         # If config is a file, read its contents.
         if hasattr(config, "read"):
             fname = getattr(config, "name", None)
@@ -710,6 +783,15 @@ class FrigateConfig(FrigateBaseModel):
             config = json.load(config)
         else:
             config = yaml.load(config)
+
+        # load minimal Frigate config after the full config did not validate
+        if safe_load:
+            safe_config = {"safe_mode": True, "cameras": {}, "mqtt": {"enabled": False}}
+
+            # copy over auth and proxy config in case auth needs to be enforced
+            safe_config["auth"] = config.get("auth", {})
+            safe_config["proxy"] = config.get("proxy", {})
+            return cls.parse_object(safe_config, **context)
 
         # Validate and return the config dict.
         return cls.parse_object(config, **context)

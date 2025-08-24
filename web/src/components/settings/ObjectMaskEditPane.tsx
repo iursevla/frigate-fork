@@ -37,8 +37,8 @@ import axios from "axios";
 import { toast } from "sonner";
 import { Toaster } from "../ui/sonner";
 import ActivityIndicator from "../indicators/activity-indicator";
-import { getAttributeLabels } from "@/utils/iconUtil";
 import { useTranslation } from "react-i18next";
+import { getTranslatedLabel } from "@/utils/i18n";
 
 type ObjectMaskEditPaneProps = {
   polygons?: Polygon[];
@@ -100,8 +100,11 @@ export default function ObjectMaskEditPane({
       objectType = objects;
     }
 
-    return `Object Mask ${count + 1} (${objectType})`;
-  }, [polygons, polygon]);
+    return t("masksAndZones.objectMaskLabel", {
+      number: count + 1,
+      label: getTranslatedLabel(objectType),
+    });
+  }, [polygons, polygon, t]);
 
   const formSchema = z
     .object({
@@ -193,6 +196,7 @@ export default function ObjectMaskEditPane({
       axios
         .put(`config/set?${queryString}`, {
           requires_restart: 0,
+          update_topic: `config/cameras/${polygon.camera}/objects`,
         })
         .then((res) => {
           if (res.status === 200) {
@@ -401,14 +405,6 @@ export function ZoneObjectSelector({ camera }: ZoneObjectSelectorProps) {
   const { t } = useTranslation(["views/settings"]);
   const { data: config } = useSWR<FrigateConfig>("config");
 
-  const attributeLabels = useMemo(() => {
-    if (!config) {
-      return [];
-    }
-
-    return getAttributeLabels(config);
-  }, [config]);
-
   const cameraConfig = useMemo(() => {
     if (config && camera) {
       return config.cameras[camera];
@@ -424,20 +420,16 @@ export function ZoneObjectSelector({ camera }: ZoneObjectSelectorProps) {
 
     Object.values(config.cameras).forEach((camera) => {
       camera.objects.track.forEach((label) => {
-        if (!attributeLabels.includes(label)) {
-          labels.add(label);
-        }
+        labels.add(label);
       });
     });
 
     cameraConfig.objects.track.forEach((label) => {
-      if (!attributeLabels.includes(label)) {
-        labels.add(label);
-      }
+      labels.add(label);
     });
 
     return [...labels].sort();
-  }, [config, cameraConfig, attributeLabels]);
+  }, [config, cameraConfig]);
 
   return (
     <>
@@ -448,7 +440,7 @@ export function ZoneObjectSelector({ camera }: ZoneObjectSelectorProps) {
         <SelectSeparator className="bg-secondary" />
         {allLabels.map((item) => (
           <SelectItem key={item} value={item}>
-            {t(item, { ns: "objects" })}
+            {getTranslatedLabel(item)}
           </SelectItem>
         ))}
       </SelectGroup>

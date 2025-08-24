@@ -35,7 +35,7 @@ import MotionTunerView from "@/views/settings/MotionTunerView";
 import MasksAndZonesView from "@/views/settings/MasksAndZonesView";
 import AuthenticationView from "@/views/settings/AuthenticationView";
 import NotificationView from "@/views/settings/NotificationsSettingsView";
-import ClassificationSettingsView from "@/views/settings/ClassificationSettingsView";
+import EnrichmentsSettingsView from "@/views/settings/EnrichmentsSettingsView";
 import UiSettingsView from "@/views/settings/UiSettingsView";
 import FrigatePlusSettingsView from "@/views/settings/FrigatePlusSettingsView";
 import { useSearchEffect } from "@/hooks/use-overlay-state";
@@ -45,13 +45,15 @@ import { isInIframe } from "@/utils/isIFrame";
 import { isPWA } from "@/utils/isPWA";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { useTranslation } from "react-i18next";
+import TriggerView from "@/views/settings/TriggerView";
 
 const allSettingsViews = [
   "ui",
-  "classification",
+  "enrichments",
   "cameras",
   "masksAndZones",
   "motionTuner",
+  "triggers",
   "debug",
   "users",
   "notifications",
@@ -171,7 +173,7 @@ export default function Settings() {
       }
     }
     // don't clear url params if we're creating a new object mask
-    return !searchParams.has("object_mask");
+    return !(searchParams.has("object_mask") || searchParams.has("event_id"));
   });
 
   useSearchEffect("camera", (camera: string) => {
@@ -179,8 +181,8 @@ export default function Settings() {
     if (cameraNames.includes(camera)) {
       setSelectedCamera(camera);
     }
-    // don't clear url params if we're creating a new object mask
-    return !searchParams.has("object_mask");
+    // don't clear url params if we're creating a new object mask or trigger
+    return !(searchParams.has("object_mask") || searchParams.has("event_id"));
   });
 
   useEffect(() => {
@@ -219,7 +221,7 @@ export default function Settings() {
                     item: t("menu." + item),
                   })}
                 >
-                  <div className="capitalize">{t("menu." + item)}</div>
+                  <div className="smart-capitalize">{t("menu." + item)}</div>
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
@@ -229,7 +231,8 @@ export default function Settings() {
         {(page == "debug" ||
           page == "cameras" ||
           page == "masksAndZones" ||
-          page == "motionTuner") && (
+          page == "motionTuner" ||
+          page == "triggers") && (
           <div className="ml-2 flex flex-shrink-0 items-center gap-2">
             {page == "masksAndZones" && (
               <ZoneMaskFilterButton
@@ -249,8 +252,8 @@ export default function Settings() {
       </div>
       <div className="mt-2 flex h-full w-full flex-col items-start md:h-dvh md:pb-24">
         {page == "ui" && <UiSettingsView />}
-        {page == "classification" && (
-          <ClassificationSettingsView setUnsavedChanges={setUnsavedChanges} />
+        {page == "enrichments" && (
+          <EnrichmentsSettingsView setUnsavedChanges={setUnsavedChanges} />
         )}
         {page == "debug" && (
           <ObjectSettingsView selectedCamera={selectedCamera} />
@@ -270,6 +273,12 @@ export default function Settings() {
         )}
         {page == "motionTuner" && (
           <MotionTunerView
+            selectedCamera={selectedCamera}
+            setUnsavedChanges={setUnsavedChanges}
+          />
+        )}
+        {page === "triggers" && (
+          <TriggerView
             selectedCamera={selectedCamera}
             setUnsavedChanges={setUnsavedChanges}
           />
@@ -336,7 +345,7 @@ function CameraSelectButton({
 
   const trigger = (
     <Button
-      className="flex items-center gap-2 bg-selected capitalize hover:bg-selected"
+      className="flex items-center gap-2 bg-selected smart-capitalize hover:bg-selected"
       aria-label="Select a camera"
       size="sm"
     >

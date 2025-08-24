@@ -1,5 +1,7 @@
 import {
+  useAudioLiveTranscription,
   useAudioState,
+  useAudioTranscriptionState,
   useAutotrackingState,
   useDetectState,
   useEnabledState,
@@ -90,6 +92,10 @@ import {
   LuX,
 } from "react-icons/lu";
 import {
+  MdCenterFocusStrong,
+  MdCenterFocusWeak,
+  MdClosedCaption,
+  MdClosedCaptionDisabled,
   MdNoPhotography,
   MdOutlineRestartAlt,
   MdPersonOff,
@@ -119,6 +125,7 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { Trans, useTranslation } from "react-i18next";
+import { useDocDomain } from "@/hooks/use-doc-domain";
 
 type LiveCameraViewProps = {
   config?: FrigateConfig;
@@ -195,6 +202,29 @@ export default function LiveCameraView({
   // camera enabled state
   const { payload: enabledState } = useEnabledState(camera.name);
   const cameraEnabled = enabledState === "ON";
+
+  // for audio transcriptions
+
+  const { payload: audioTranscriptionState, send: sendTranscription } =
+    useAudioTranscriptionState(camera.name);
+  const { payload: transcription } = useAudioLiveTranscription(camera.name);
+  const transcriptionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (transcription) {
+      if (transcriptionRef.current) {
+        transcriptionRef.current.scrollTop =
+          transcriptionRef.current.scrollHeight;
+      }
+    }
+  }, [transcription]);
+
+  useEffect(() => {
+    return () => {
+      // disable transcriptions when unmounting
+      if (audioTranscriptionState == "ON") sendTranscription("OFF");
+    };
+  }, [audioTranscriptionState, sendTranscription]);
 
   // click overlay for ptzs
 
@@ -531,11 +561,9 @@ export default function LiveCameraView({
                   Icon={mic ? FaMicrophone : FaMicrophoneSlash}
                   isActive={mic}
                   title={
-                    (mic
-                      ? t("button.disable", { ns: "common" })
-                      : t("button.enable", { ns: "common" })) +
-                    " " +
-                    t("button.twoWayTalk", { ns: "common" })
+                    mic
+                      ? t("twoWayTalk.disable", { ns: "views/live" })
+                      : t("twoWayTalk.enable", { ns: "views/live" })
                   }
                   onClick={() => {
                     setMic(!mic);
@@ -553,11 +581,9 @@ export default function LiveCameraView({
                   Icon={audio ? GiSpeaker : GiSpeakerOff}
                   isActive={audio ?? false}
                   title={
-                    (audio
-                      ? t("button.disable", { ns: "common" })
-                      : t("button.enable", { ns: "common" })) +
-                    " " +
-                    t("button.cameraAudio", { ns: "common" })
+                    audio
+                      ? t("cameraAudio.disable", { ns: "views/live" })
+                      : t("cameraAudio.enable", { ns: "views/live" })
                   }
                   onClick={() => setAudio(!audio)}
                   disabled={!cameraEnabled}
@@ -569,6 +595,9 @@ export default function LiveCameraView({
                 audioDetectEnabled={camera.audio.enabled_in_config}
                 autotrackingEnabled={
                   camera.onvif.autotracking.enabled_in_config
+                }
+                transcriptionEnabled={
+                  camera.audio_transcription.enabled_in_config
                 }
                 fullscreen={fullscreen}
                 streamName={streamName ?? ""}
@@ -629,12 +658,23 @@ export default function LiveCameraView({
               />
             </div>
           </TransformComponent>
+          {camera?.audio?.enabled_in_config &&
+            audioTranscriptionState == "ON" &&
+            transcription != null && (
+              <div
+                ref={transcriptionRef}
+                className="text-md scrollbar-container absolute bottom-4 left-1/2 max-h-[15vh] w-[75%] -translate-x-1/2 overflow-y-auto rounded-lg bg-black/70 p-2 text-white md:w-[50%]"
+              >
+                {transcription}
+              </div>
+            )}
         </div>
       </div>
       {camera.onvif.host != "" && (
         <div className="flex flex-col items-center justify-center">
           <PtzControlPanel
             camera={camera.name}
+            enabled={cameraEnabled}
             clickOverlay={clickOverlay}
             setClickOverlay={setClickOverlay}
           />
@@ -693,15 +733,19 @@ function TooltipButton({
 
 function PtzControlPanel({
   camera,
+  enabled,
   clickOverlay,
   setClickOverlay,
 }: {
   camera: string;
+  enabled: boolean;
   clickOverlay: boolean;
   setClickOverlay: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
   const { t } = useTranslation(["views/live"]);
-  const { data: ptz } = useSWR<CameraPtzInfo>(`${camera}/ptz/info`);
+  const { data: ptz } = useSWR<CameraPtzInfo>(
+    enabled ? `${camera}/ptz/info` : null,
+  );
 
   const { send: sendPtz } = usePtzCommand(camera);
 
@@ -767,10 +811,10 @@ function PtzControlPanel({
           sendPtz("MOVE_DOWN");
           break;
         case "+":
-          sendPtz("ZOOM_IN");
+          sendPtz(modifiers.shift ? "FOCUS_IN" : "ZOOM_IN");
           break;
         case "-":
-          sendPtz("ZOOM_OUT");
+          sendPtz(modifiers.shift ? "FOCUS_OUT" : "ZOOM_OUT");
           break;
       }
     },
@@ -881,6 +925,40 @@ function PtzControlPanel({
           </TooltipButton>
         </>
       )}
+      {ptz?.features?.includes("focus") && (
+        <>
+          <TooltipButton
+            label={t("ptz.focus.in.label")}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              sendPtz("FOCUS_IN");
+            }}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              sendPtz("FOCUS_IN");
+            }}
+            onMouseUp={onStop}
+            onTouchEnd={onStop}
+          >
+            <MdCenterFocusStrong />
+          </TooltipButton>
+          <TooltipButton
+            label={t("ptz.focus.out.label")}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              sendPtz("FOCUS_OUT");
+            }}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              sendPtz("FOCUS_OUT");
+            }}
+            onMouseUp={onStop}
+            onTouchEnd={onStop}
+          >
+            <MdCenterFocusWeak />
+          </TooltipButton>
+        </>
+      )}
 
       {ptz?.features?.includes("pt-r-fov") && (
         <TooltipProvider>
@@ -898,8 +976,7 @@ function PtzControlPanel({
               <p>
                 {clickOverlay
                   ? t("ptz.move.clickMove.disable")
-                  : t("ptz.move.clickMove.enable")}{" "}
-                click to move
+                  : t("ptz.move.clickMove.enable")}
               </p>
             </TooltipContent>
           </Tooltip>
@@ -983,6 +1060,7 @@ type FrigateCameraFeaturesProps = {
   recordingEnabled: boolean;
   audioDetectEnabled: boolean;
   autotrackingEnabled: boolean;
+  transcriptionEnabled: boolean;
   fullscreen: boolean;
   streamName: string;
   setStreamName?: (value: string | undefined) => void;
@@ -1002,6 +1080,7 @@ function FrigateCameraFeatures({
   recordingEnabled,
   audioDetectEnabled,
   autotrackingEnabled,
+  transcriptionEnabled,
   fullscreen,
   streamName,
   setStreamName,
@@ -1017,6 +1096,7 @@ function FrigateCameraFeatures({
   cameraEnabled,
 }: FrigateCameraFeaturesProps) {
   const { t } = useTranslation(["views/live", "components/dialog"]);
+  const { getLocaleDocUrl } = useDocDomain();
 
   const { payload: detectState, send: sendDetect } = useDetectState(
     camera.name,
@@ -1033,6 +1113,8 @@ function FrigateCameraFeatures({
   const { payload: audioState, send: sendAudio } = useAudioState(camera.name);
   const { payload: autotrackingState, send: sendAutotracking } =
     useAutotrackingState(camera.name);
+  const { payload: transcriptionState, send: sendTranscription } =
+    useAudioTranscriptionState(camera.name);
 
   // roles
 
@@ -1196,6 +1278,27 @@ function FrigateCameraFeatures({
                 disabled={!cameraEnabled}
               />
             )}
+            {audioDetectEnabled && transcriptionEnabled && (
+              <CameraFeatureToggle
+                className="p-2 md:p-0"
+                variant={fullscreen ? "overlay" : "primary"}
+                Icon={
+                  transcriptionState == "ON"
+                    ? MdClosedCaption
+                    : MdClosedCaptionDisabled
+                }
+                isActive={transcriptionState == "ON"}
+                title={
+                  transcriptionState == "ON"
+                    ? t("transcription.disable")
+                    : t("transcription.enable")
+                }
+                onClick={() =>
+                  sendTranscription(transcriptionState == "ON" ? "OFF" : "ON")
+                }
+                disabled={!cameraEnabled || audioState == "OFF"}
+              />
+            )}
             {autotrackingEnabled && (
               <CameraFeatureToggle
                 className="p-2 md:p-0"
@@ -1271,17 +1374,12 @@ function FrigateCameraFeatures({
                         })}
                         <div className="mt-2 flex items-center text-primary">
                           <Link
-                            to="https://docs.frigate.video/configuration/live"
+                            to={getLocaleDocUrl("configuration/live")}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline"
                           >
-                            {t(
-                              "streaming.restreaming.desc.readTheDocumentation",
-                              {
-                                ns: "components/dialog",
-                              },
-                            )}
+                            {t("readTheDocumentation", { ns: "common" })}
                             <LuExternalLink className="ml-2 inline-flex size-3" />
                           </Link>
                         </div>
@@ -1349,12 +1447,14 @@ function FrigateCameraFeatures({
                                 {t("stream.audio.tips.title")}
                                 <div className="mt-2 flex items-center text-primary">
                                   <Link
-                                    to="https://docs.frigate.video/configuration/live"
+                                    to={getLocaleDocUrl("configuration/live")}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="inline"
                                   >
-                                    {t("stream.audio.tips.documentation")}
+                                    {t("readTheDocumentation", {
+                                      ns: "common",
+                                    })}
                                     <LuExternalLink className="ml-2 inline-flex size-3" />
                                   </Link>
                                 </div>
@@ -1376,7 +1476,7 @@ function FrigateCameraFeatures({
                           ) : (
                             <>
                               <LuX className="size-4 text-danger" />
-                              <div>{t("stream.twoWayTalk.available")}</div>
+                              <div>{t("stream.twoWayTalk.unavailable")}</div>
                               <Popover>
                                 <PopoverTrigger asChild>
                                   <div className="cursor-pointer p-0">
@@ -1390,14 +1490,16 @@ function FrigateCameraFeatures({
                                   {t("stream.twoWayTalk.tips")}
                                   <div className="mt-2 flex items-center text-primary">
                                     <Link
-                                      to="https://docs.frigate.video/configuration/live/#webrtc-extra-configuration"
+                                      to={getLocaleDocUrl(
+                                        "configuration/live/#webrtc-extra-configuration",
+                                      )}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="inline"
                                     >
-                                      {t(
-                                        "stream.twoWayTalk.tips.documentation",
-                                      )}
+                                      {t("readTheDocumentation", {
+                                        ns: "common",
+                                      })}
                                       <LuExternalLink className="ml-2 inline-flex size-3" />
                                     </Link>
                                   </div>
@@ -1479,17 +1581,17 @@ function FrigateCameraFeatures({
                   })}
                 </p>
               </div>
-              <div className="flex flex-col gap-1">
+              <div
+                className="flex cursor-pointer flex-col gap-1"
+                onClick={() =>
+                  navigate(`/settings?page=debug&camera=${camera.name}`)
+                }
+              >
                 <div className="flex items-center justify-between text-sm font-medium leading-none">
                   {t("streaming.debugView", {
                     ns: "components/dialog",
                   })}
-                  <LuExternalLink
-                    onClick={() =>
-                      navigate(`/settings?page=debug&camera=${camera.name}`)
-                    }
-                    className="ml-2 inline-flex size-5 cursor-pointer"
-                  />
+                  <LuExternalLink className="ml-2 inline-flex size-5" />
                 </div>
               </div>
             </div>
@@ -1558,6 +1660,16 @@ function FrigateCameraFeatures({
                   }
                 />
               )}
+              {audioDetectEnabled && transcriptionEnabled && (
+                <FilterSwitch
+                  label={t("cameraSettings.transcription")}
+                  disabled={audioState == "OFF"}
+                  isChecked={transcriptionState == "ON"}
+                  onCheckedChange={() =>
+                    sendTranscription(transcriptionState == "ON" ? "OFF" : "ON")
+                  }
+                />
+              )}
               {autotrackingEnabled && (
                 <FilterSwitch
                   label={t("cameraSettings.autotracking")}
@@ -1574,7 +1686,7 @@ function FrigateCameraFeatures({
         <div className="mt-3 flex flex-col gap-5">
           {!isRestreamed && (
             <div className="flex flex-col gap-2 p-2">
-              <Label>{t("streaming.title", { ns: "components/dialog" })}</Label>
+              <Label>{t("stream.title")}</Label>
               <div className="flex flex-row items-center gap-1 text-sm text-muted-foreground">
                 <LuX className="size-4 text-danger" />
                 <div>
@@ -1592,19 +1704,17 @@ function FrigateCameraFeatures({
                     </div>
                   </PopoverTrigger>
                   <PopoverContent className="w-80 text-xs">
-                    {t("streaming.restreaming.desc", {
+                    {t("streaming.restreaming.desc.title", {
                       ns: "components/dialog",
                     })}
                     <div className="mt-2 flex items-center text-primary">
                       <Link
-                        to="https://docs.frigate.video/configuration/live"
+                        to={getLocaleDocUrl("configuration/live")}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline"
                       >
-                        {t("streaming.restreaming.readTheDocumentation", {
-                          ns: "components/dialog",
-                        })}
+                        {t("readTheDocumentation", { ns: "common" })}
                         <LuExternalLink className="ml-2 inline-flex size-3" />
                       </Link>
                     </div>
@@ -1668,12 +1778,12 @@ function FrigateCameraFeatures({
                           {t("stream.audio.tips.title")}
                           <div className="mt-2 flex items-center text-primary">
                             <Link
-                              to="https://docs.frigate.video/configuration/live"
+                              to={getLocaleDocUrl("configuration/live")}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline"
                             >
-                              {t("stream.audio.tips.documentation")}
+                              {t("readTheDocumentation", { ns: "common" })}
                               <LuExternalLink className="ml-2 inline-flex size-3" />
                             </Link>
                           </div>
@@ -1709,12 +1819,14 @@ function FrigateCameraFeatures({
                             {t("stream.twoWayTalk.tips")}
                             <div className="mt-2 flex items-center text-primary">
                               <Link
-                                to="https://docs.frigate.video/configuration/live/#webrtc-extra-configuration"
+                                to={getLocaleDocUrl(
+                                  "configuration/live/#webrtc-extra-configuration",
+                                )}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline"
                               >
-                                {t("stream.twoWayTalk.tips.documentation")}
+                                {t("readTheDocumentation", { ns: "common" })}
                                 <LuExternalLink className="ml-2 inline-flex size-3" />
                               </Link>
                             </div>
@@ -1758,7 +1870,7 @@ function FrigateCameraFeatures({
                 isRecording && "animate-pulse bg-red-500 hover:bg-red-600",
               )}
             >
-              {t("manualRecording." + isRecording ? "end" : "start")}
+              {t("manualRecording." + (isRecording ? "end" : "start"))}
             </Button>
             <p className="text-sm text-muted-foreground">
               {t("manualRecording.tips")}

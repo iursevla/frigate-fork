@@ -26,6 +26,7 @@ import { CalendarRangeFilterButton } from "./CalendarFilterButton";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 import { useTranslation } from "react-i18next";
+import { getTranslatedLabel } from "@/utils/i18n";
 
 type SearchFilterGroupProps = {
   className: string;
@@ -63,11 +64,20 @@ export default function SearchFilterGroup({
         return;
       }
       const cameraConfig = config.cameras[camera];
+
+      if (!cameraConfig) {
+        return;
+      }
+
       cameraConfig.objects.track.forEach((label) => {
         if (!config.model.all_attributes.includes(label)) {
           labels.add(label);
         }
       });
+
+      if (cameraConfig.type == "lpr") {
+        labels.add("license_plate");
+      }
 
       if (cameraConfig.audio.enabled_in_config) {
         cameraConfig.audio.listen.forEach((label) => {
@@ -95,7 +105,13 @@ export default function SearchFilterGroup({
       if (camera == "birdseye") {
         return;
       }
+
       const cameraConfig = config.cameras[camera];
+
+      if (!cameraConfig) {
+        return;
+      }
+
       Object.entries(cameraConfig.zones).map(([name, _]) => {
         zones.add(name);
       });
@@ -115,10 +131,7 @@ export default function SearchFilterGroup({
   );
 
   const availableSortTypes = useMemo(() => {
-    const sortTypes = ["date_asc", "date_desc"];
-    if (filter?.min_score || filter?.max_score) {
-      sortTypes.push("score_desc", "score_asc");
-    }
+    const sortTypes = ["date_asc", "date_desc", "score_desc", "score_asc"];
     if (filter?.min_speed || filter?.max_speed) {
       sortTypes.push("speed_desc", "speed_asc");
     }
@@ -248,7 +261,7 @@ function GeneralFilterButton({
     }
 
     if (selectedLabels.length == 1) {
-      return t(selectedLabels[0], { ns: "objects" });
+      return getTranslatedLabel(selectedLabels[0]);
     }
 
     return t("labels.count", {
@@ -268,7 +281,7 @@ function GeneralFilterButton({
     <Button
       size="sm"
       variant={selectedLabels?.length ? "select" : "default"}
-      className="flex items-center gap-2 capitalize"
+      className="flex items-center gap-2 smart-capitalize"
       aria-label={t("labels.label")}
     >
       <MdLabel
@@ -355,7 +368,7 @@ export function GeneralFilterContent({
           {allLabels.map((item) => (
             <FilterSwitch
               key={item}
-              label={t(item, { ns: "objects" })}
+              label={getTranslatedLabel(item)}
               isChecked={currentLabels?.includes(item) ?? false}
               onCheckedChange={(isChecked) => {
                 if (isChecked) {
@@ -440,7 +453,7 @@ function SortTypeButton({
           ? "select"
           : "default"
       }
-      className="flex items-center gap-2 capitalize"
+      className="flex items-center gap-2 smart-capitalize"
       aria-label={t("labels.label")}
     >
       <MdSort

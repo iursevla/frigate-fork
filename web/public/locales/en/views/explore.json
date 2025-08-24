@@ -1,11 +1,12 @@
 {
   "documentTitle": "Explore - Frigate",
   "generativeAI": "Generative AI",
+  "exploreMore": "Explore more {{label}} objects",
   "exploreIsUnavailable": {
     "title": "Explore is Unavailable",
     "embeddingsReindexing": {
       "context": "Explore can be used after tracked object embeddings have finished reindexing.",
-      "startingUp": "Starting up...",
+      "startingUp": "Starting up…",
       "estimatedTime": "Estimated time remaining:",
       "finishingShortly": "Finishing shortly",
       "step": {
@@ -23,8 +24,7 @@
         "textTokenizer": "Text tokenizer"
       },
       "tips": {
-        "context": "You may want to reindex the embeddings of your tracked objects once the models are downloaded.",
-        "documentation": "Read the documentation"
+        "context": "You may want to reindex the embeddings of your tracked objects once the models are downloaded."
       },
       "error": "An error has occurred. Check Frigate logs."
     }
@@ -43,6 +43,8 @@
     "adjustAnnotationSettings": "Adjust annotation settings",
     "scrollViewTips": "Scroll to view the significant moments of this object's lifecycle.",
     "autoTrackingTips": "Bounding box positions will be inaccurate for autotracking cameras.",
+    "count": "{{first}} of {{second}}",
+    "trackedPoint": "Tracked Point",
     "lifecycleItemDesc": {
       "visible": "{{label}} detected",
       "entered_zone": "{{label}} entered {{zones}}",
@@ -54,7 +56,12 @@
       },
       "gone": "{{label}} left",
       "heard": "{{label}} heard",
-      "external": "{{label}} detected"
+      "external": "{{label}} detected",
+      "header": {
+        "zones": "Zones",
+        "ratio": "Ratio",
+        "area": "Area"
+      }
     },
     "annotationSettings": {
       "title": "Annotation Settings",
@@ -65,9 +72,11 @@
       "offset": {
         "label": "Annotation Offset",
         "desc": "This data comes from your camera's detect feed but is overlayed on images from the the record feed. It is unlikely that the two streams are perfectly in sync. As a result, the bounding box and the footage will not line up perfectly. However, the <code>annotation_offset</code> field can be used to adjust this.",
-        "documentation": "Read the documentation ",
         "millisecondsToOffset": "Milliseconds to offset detect annotations by. <em>Default: 0</em>",
-        "tips": "TIP: Imagine there is an event clip with a person walking from left to right. If the event timeline bounding box is consistently to the left of the person then the value should be decreased. Similarly, if a person is walking from left to right and the bounding box is consistently ahead of the person then the value should be increased."
+        "tips": "TIP: Imagine there is an event clip with a person walking from left to right. If the event timeline bounding box is consistently to the left of the person then the value should be decreased. Similarly, if a person is walking from left to right and the bounding box is consistently ahead of the person then the value should be increased.",
+        "toast": {
+          "success": "Annotation offset for {{camera}} has been saved to the config file. Restart Frigate to apply your changes."
+        }
       }
     },
     "carousel": {
@@ -91,11 +100,15 @@
       "toast": {
         "success": {
           "regenerate": "A new description has been requested from {{provider}}. Depending on the speed of your provider, the new description may take some time to regenerate.",
-          "updatedSublabel": "Successfully updated sub label."
+          "updatedSublabel": "Successfully updated sub label.",
+          "updatedLPR": "Successfully updated license plate.",
+          "audioTranscription": "Successfully requested audio transcription."
         },
         "error": {
           "regenerate": "Failed to call {{provider}} for a new description: {{errorMessage}}",
-          "updatedSublabelFailed": "Failed to update sub label: {{errorMessage}}"
+          "updatedSublabelFailed": "Failed to update sub label: {{errorMessage}}",
+          "updatedLPRFailed": "Failed to update license plate: {{errorMessage}}",
+          "audioTranscription": "Failed to request audio transcription: {{errorMessage}}"
         }
       }
     },
@@ -105,10 +118,22 @@
       "desc": "Enter a new sub label for this {{label}}",
       "descNoLabel": "Enter a new sub label for this tracked object"
     },
+    "editLPR": {
+      "title": "Edit license plate",
+      "desc": "Enter a new license plate value for this {{label}}",
+      "descNoLabel": "Enter a new license plate value for this tracked object"
+    },
+    "snapshotScore": {
+      "label": "Snapshot Score"
+    },
     "topScore": {
       "label": "Top Score",
       "info": "The top score is the highest median score for the tracked object, so this may differ from the score shown on the search result thumbnail."
     },
+    "score": {
+      "label": "Score"
+    },
+    "recognizedLicensePlate": "Recognized License Plate",
     "estimatedSpeed": "Estimated Speed",
     "objects": "Objects",
     "camera": "Camera",
@@ -151,6 +176,14 @@
       "label": "Find similar",
       "aria": "Find similar tracked objects"
     },
+    "addTrigger": {
+      "label": "Add trigger",
+      "aria": "Add a trigger for this tracked object"
+    },
+    "audioTranscription": {
+      "label": "Transcribe",
+      "aria": "Request audio transcription"
+    },
     "submitToPlus": {
       "label": "Submit to Frigate+",
       "aria": "Submit to Frigate Plus"
@@ -171,13 +204,21 @@
   },
   "noTrackedObjects": "No Tracked Objects Found",
   "fetchingTrackedObjectsFailed": "Error fetching tracked objects: {{errorMessage}}",
-  "trackedObjectsCount": "{{count}} tracked objects ",
+  "trackedObjectsCount_one": "{{count}} tracked object ",
+  "trackedObjectsCount_other": "{{count}} tracked objects ",
   "searchResult": {
+    "tooltip": "Matched {{type}} at {{confidence}}%",
     "deleteTrackedObject": {
       "toast": {
         "success": "Tracked object deleted successfully.",
         "error": "Failed to delete tracked object: {{errorMessage}}"
       }
     }
+  },
+  "aiAnalysis": {
+    "title": "AI Analysis"
+  },
+  "concerns": {
+    "label": "Concerns"
   }
 }

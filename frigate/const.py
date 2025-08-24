@@ -11,6 +11,7 @@ EXPORT_DIR = f"{BASE_DIR}/exports"
 FACE_DIR = f"{CLIPS_DIR}/faces"
 THUMB_DIR = f"{CLIPS_DIR}/thumbs"
 RECORD_DIR = f"{BASE_DIR}/recordings"
+TRIGGER_DIR = f"{CLIPS_DIR}/triggers"
 BIRDSEYE_PIPE = "/tmp/cache/birdseye"
 CACHE_DIR = "/tmp/cache"
 FRIGATE_LOCALHOST = "http://127.0.0.1:5000"
@@ -26,6 +27,7 @@ DEFAULT_ATTRIBUTE_LABEL_MAP = {
     "car": [
         "amazon",
         "an_post",
+        "canada_post",
         "dhl",
         "dpd",
         "fedex",
@@ -35,9 +37,11 @@ DEFAULT_ATTRIBUTE_LABEL_MAP = {
         "postnl",
         "postnord",
         "purolator",
+        "royal_mail",
         "ups",
         "usps",
     ],
+    "motorcycle": ["license_plate"],
 }
 LABEL_CONSOLIDATION_MAP = {
     "car": 0.8,
@@ -69,6 +73,7 @@ LIBAVFORMAT_VERSION_MAJOR = int(os.environ.get("LIBAVFORMAT_VERSION_MAJOR", "59"
 FFMPEG_HWACCEL_NVIDIA = "preset-nvidia"
 FFMPEG_HWACCEL_VAAPI = "preset-vaapi"
 FFMPEG_HWACCEL_VULKAN = "preset-vulkan"
+FFMPEG_HWACCEL_RKMPP = "preset-rkmpp"
 FFMPEG_HVC1_ARGS = ["-tag:v", "hvc1"]
 
 # Regex constants
@@ -106,9 +111,17 @@ UPSERT_REVIEW_SEGMENT = "upsert_review_segment"
 CLEAR_ONGOING_REVIEW_SEGMENTS = "clear_ongoing_review_segments"
 UPDATE_CAMERA_ACTIVITY = "update_camera_activity"
 UPDATE_EVENT_DESCRIPTION = "update_event_description"
+UPDATE_REVIEW_DESCRIPTION = "update_review_description"
 UPDATE_MODEL_STATE = "update_model_state"
 UPDATE_EMBEDDINGS_REINDEX_PROGRESS = "handle_embeddings_reindex_progress"
+UPDATE_BIRDSEYE_LAYOUT = "update_birdseye_layout"
 NOTIFICATION_TEST = "notification_test"
+
+# IO Nice Values
+
+PROCESS_PRIORITY_HIGH = 0
+PROCESS_PRIORITY_MED = 10
+PROCESS_PRIORITY_LOW = 19
 
 # Stats Values
 
@@ -128,3 +141,7 @@ AUTOTRACKING_ZOOM_EDGE_THRESHOLD = 0.05
 
 JWT_SECRET_ENV_VAR = "FRIGATE_JWT_SECRET"
 PASSWORD_HASH_ALGORITHM = "pbkdf2_sha256"
+
+# Queues
+
+FAST_QUEUE_TIMEOUT = 0.00001  # seconds

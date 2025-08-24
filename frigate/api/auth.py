@@ -33,6 +33,7 @@ from frigate.models import User
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=[Tags.auth])
+VALID_ROLES = ["admin", "viewer"]
 
 
 class RateLimiter:
@@ -70,7 +71,7 @@ def get_remote_addr(request: Request):
             )
             if trusted_proxy.version == 4:
                 ipv4 = ip.ipv4_mapped if ip.version == 6 else ip
-                if ipv4 in trusted_proxy:
+                if ipv4 is not None and ipv4 in trusted_proxy:
                     trusted = True
                     logger.debug(f"Trusted: {str(ip)} by {str(trusted_proxy)}")
                     break
@@ -202,9 +203,15 @@ async def get_current_user(request: Request):
 
 def require_role(required_roles: List[str]):
     async def role_checker(request: Request):
+        proxy_config: ProxyConfig = request.app.frigate_config.proxy
+
         # Get role from header (could be comma-separated)
         role_header = request.headers.get("remote-role")
-        roles = [r.strip() for r in role_header.split(",")] if role_header else []
+        roles = (
+            [r.strip() for r in role_header.split(proxy_config.separator)]
+            if role_header
+            else []
+        )
 
         # Check if we have any roles
         if not roles:
@@ -261,14 +268,18 @@ def auth(request: Request):
 
         role_header = proxy_config.header_map.role
         role = (
-            request.headers.get(role_header, default="viewer")
+            request.headers.get(role_header, default=proxy_config.default_role)
             if role_header
-            else "viewer"
+            else proxy_config.default_role
         )
 
-        # if comma-separated with "admin", use "admin", else "viewer"
-        success_response.headers["remote-role"] = (
-            "admin" if role and "admin" in role else "viewer"
+        # if comma-separated with "admin", use "admin",
+        # if comma-separated with "viewer", use "viewer",
+        # else use default role
+
+        roles = [r.strip() for r in role.split(proxy_config.separator)] if role else []
+        success_response.headers["remote-role"] = next(
+            (r for r in VALID_ROLES if r in roles), proxy_config.default_role
         )
 
         return success_response
@@ -393,7 +404,7 @@ def login(request: Request, body: AppPostLoginBody):
     password_hash = db_user.password_hash
     if verify_password(password, password_hash):
         role = getattr(db_user, "role", "viewer")
-        if role not in ["admin", "viewer"]:
+        if role not in VALID_ROLES:
             role = "viewer"  # Enforce valid roles
         expiration = int(time.time()) + JWT_SESSION_LENGTH
         encoded_jwt = create_encoded_jwt(user, role, expiration, request.app.jwt_token)
@@ -423,7 +434,7 @@ def create_user(
     if not re.match("^[A-Za-z0-9._]+$", body.username):
         return JSONResponse(content={"message": "Invalid username"}, status_code=400)
 
-    role = body.role if body.role in ["admin", "viewer"] else "viewer"
+    role = body.role if body.role in VALID_ROLES else "viewer"
     password_hash = hash_password(body.password, iterations=HASH_ITERATIONS)
     User.insert(
         {
@@ -494,7 +505,7 @@ async def update_role(
         return JSONResponse(
             content={"message": "Cannot modify admin user's role"}, status_code=403
         )
-    if body.role not in ["admin", "viewer"]:
+    if body.role not in VALID_ROLES:
         return JSONResponse(
             content={"message": "Role must be 'admin' or 'viewer'"}, status_code=400
         )

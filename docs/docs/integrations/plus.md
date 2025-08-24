@@ -43,13 +43,15 @@ Snapshots must be enabled to be able to submit examples to Frigate+
 
 ### Annotate and verify
 
-You can view all of your submitted images at [https://plus.frigate.video](https://plus.frigate.video). Annotations can be added by clicking an image. For more detailed information about labeling, see the documentation on [improving your model](../plus/improving_model.md).
+You can view all of your submitted images at [https://plus.frigate.video](https://plus.frigate.video). Annotations can be added by clicking an image. For more detailed information about labeling, see the documentation on [annotating](../plus/annotating.md).
 
 ![Annotate](/img/annotate.png)
 
 ## Use Models
 
 Once you have [requested your first model](../plus/first_model.md) and gotten your own model ID, it can be used with a special model path. No other information needs to be configured for Frigate+ models because it fetches the remaining config from Frigate+ automatically.
+
+You can either choose the new model from the Frigate+ pane in the Settings page of the Frigate UI, or manually set the model at the root level in your config:
 
 ```yaml
 model:

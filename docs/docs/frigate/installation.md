@@ -132,6 +132,77 @@ If you are using `docker run`, add this option to your command `--device /dev/ha
 
 Finally, configure [hardware object detection](/configuration/object_detectors#hailo-8l) to complete the setup.
 
+### MemryX MX3  
+
+The MemryX MX3 Accelerator is available in the M.2 2280 form factor (like an NVMe SSD), and supports a variety of configurations:
+- x86 (Intel/AMD) PCs
+- Raspberry Pi 5
+- Orange Pi 5 Plus/Max
+- Multi-M.2 PCIe carrier cards
+
+#### Configuration  
+
+
+#### Installation  
+
+To get started with MX3 hardware setup for your system, refer to the [Hardware Setup Guide](https://developer.memryx.com/get_started/hardware_setup.html).
+
+Then follow these steps for installing the correct driver/runtime configuration:
+
+1. Copy or download [this script](https://github.com/blakeblackshear/frigate/blob/dev/docker/memryx/user_installation.sh).
+2. Ensure it has execution permissions with `sudo chmod +x user_installation.sh`
+3. Run the script with `./user_installation.sh`
+4. **Restart your computer** to complete driver installation.
+
+#### Setup  
+
+To set up Frigate, follow the default installation instructions, for example:   `ghcr.io/blakeblackshear/frigate:stable`
+
+Next, grant Docker permissions to access your hardware by adding the following lines to your `docker-compose.yml` file:
+
+```yaml
+devices:
+  - /dev/memx0
+```
+
+During configuration, you must run Docker in privileged mode and ensure the container can access the max-manager.
+
+In your `docker-compose.yml`, also add:
+
+```yaml
+privileged: true
+
+volumes:
+    /run/mxa_manager:/run/mxa_manager
+```
+
+If you can't use Docker Compose, you can run the container with something similar to this:
+
+```bash
+  docker run -d \
+    --name frigate-memx \
+    --restart=unless-stopped \
+    --mount type=tmpfs,target=/tmp/cache,tmpfs-size=1000000000 \
+    --shm-size=256m \
+    -v /path/to/your/storage:/media/frigate \
+    -v /path/to/your/config:/config \
+    -v /etc/localtime:/etc/localtime:ro \
+    -v /run/mxa_manager:/run/mxa_manager \
+    -e FRIGATE_RTSP_PASSWORD='password' \
+    --privileged=true \
+    -p 8971:8971 \
+    -p 8554:8554 \
+    -p 5000:5000 \
+    -p 8555:8555/tcp \
+    -p 8555:8555/udp \
+    --device /dev/memx0 \
+    ghcr.io/blakeblackshear/frigate:stable
+```
+
+#### Configuration
+
+Finally, configure [hardware object detection](/configuration/object_detectors#memryx-mx3) to complete the setup.
+
 ### Rockchip platform
 
 Make sure that you use a linux distribution that comes with the rockchip BSP kernel 5.10 or 6.1 and necessary drivers (especially rkvdec2 and rknpu). To check, enter the following commands:
@@ -145,7 +216,7 @@ $ sudo cat /sys/kernel/debug/rknpu/version
 RKNPU driver: v0.9.2 # or later version
 ```
 
-I recommend [Joshua Riek's Ubuntu for Rockchip](https://github.com/Joshua-Riek/ubuntu-rockchip), if your board is supported.
+I recommend [Armbian](https://www.armbian.com/download/?arch=aarch64), if your board is supported.
 
 #### Setup
 
@@ -165,6 +236,8 @@ devices:
   - /dev/dma_heap
   - /dev/rga
   - /dev/mpp_service
+volumes:
+  - /sys/:/sys/:ro
 ```
 
 or add these options to your `docker run` command:
@@ -175,12 +248,13 @@ or add these options to your `docker run` command:
 --device /dev/dri \
 --device /dev/dma_heap \
 --device /dev/rga \
---device /dev/mpp_service
+--device /dev/mpp_service \
+--volume /sys/:/sys/:ro
 ```
 
 #### Configuration
 
-Next, you should configure [hardware object detection](/configuration/object_detectors#rockchip-platform) and [hardware video processing](/configuration/hardware_acceleration#rockchip-platform).
+Next, you should configure [hardware object detection](/configuration/object_detectors#rockchip-platform) and [hardware video processing](/configuration/hardware_acceleration_video#rockchip-platform).
 
 ## Docker
 
@@ -242,17 +316,15 @@ docker run -d \
 
 The official docker image tags for the current stable version are:
 
-- `stable` - Standard Frigate build for amd64 & RPi Optimized Frigate build for arm64
+- `stable` - Standard Frigate build for amd64 & RPi Optimized Frigate build for arm64. This build includes support for Hailo devices as well.
 - `stable-standard-arm64` - Standard Frigate build for arm64
 - `stable-tensorrt` - Frigate build specific for amd64 devices running an nvidia GPU
+- `stable-rocm` - Frigate build for [AMD GPUs](../configuration/object_detectors.md#amdrocm-gpu-detector)
 
 The community supported docker image tags for the current stable version are:
 
-- `stable-tensorrt-jp5` - Frigate build optimized for nvidia Jetson devices running Jetpack 5
 - `stable-tensorrt-jp6` - Frigate build optimized for nvidia Jetson devices running Jetpack 6
 - `stable-rk` - Frigate build for SBCs with Rockchip SoC
-- `stable-rocm` - Frigate build for [AMD GPUs](../configuration/object_detectors.md#amdrocm-gpu-detector)
-  - `stable-h8l` - Frigate build for the Hailo-8L M.2 PICe Raspberry Pi 5 hat
 
 ## Home Assistant Add-on
 
@@ -315,7 +387,8 @@ If you choose to run Frigate via LXC in Proxmox the setup can be complex so be p
 
 :::
 
- Suggestions include:
+Suggestions include:
+
 - For Intel-based hardware acceleration, to allow access to the `/dev/dri/renderD128` device with major number 226 and minor number 128, add the following lines to the `/etc/pve/lxc/<id>.conf` LXC configuration:
   - `lxc.cgroup2.devices.allow: c 226:128 rwm`
   - `lxc.mount.entry: /dev/dri/renderD128 dev/dri/renderD128 none bind,optional,create=file`
@@ -406,7 +479,7 @@ mkdir -p /share/share_vol2/frigate/media
 # Also replace the time zone value for 'TZ' in the sample command.
 # Example command will create a docker container that uses at most 2 CPUs and 4G RAM.
 # You may need to add "--env=LIBVA_DRIVER_NAME=i965 \" to the following docker run command if you
-# have certain CPU (e.g., J4125). See https://docs.frigate.video/configuration/hardware_acceleration.
+# have certain CPU (e.g., J4125). See https://docs.frigate.video/configuration/hardware_acceleration_video.
 docker run \
   --name=frigate \
   --shm-size=256m \

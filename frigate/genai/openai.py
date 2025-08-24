@@ -21,7 +21,9 @@ class OpenAIClient(GenAIClient):
 
     def _init_provider(self):
         """Initialize the client."""
-        return OpenAI(api_key=self.genai_config.api_key)
+        return OpenAI(
+            api_key=self.genai_config.api_key, **self.genai_config.provider_options
+        )
 
     def _send(self, prompt: str, images: list[bytes]) -> Optional[str]:
         """Submit a request to OpenAI."""
@@ -54,9 +56,13 @@ class OpenAIClient(GenAIClient):
                 ],
                 timeout=self.timeout,
             )
-        except TimeoutException as e:
+            if (
+                result is not None
+                and hasattr(result, "choices")
+                and len(result.choices) > 0
+            ):
+                return result.choices[0].message.content.strip()
+            return None
+        except (TimeoutException, Exception) as e:
             logger.warning("OpenAI returned an error: %s", str(e))
             return None
-        if len(result.choices) > 0:
-            return result.choices[0].message.content.strip()
-        return None

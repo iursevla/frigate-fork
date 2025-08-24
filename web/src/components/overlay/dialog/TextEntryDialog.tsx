@@ -8,6 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { isMobile } from "react-device-detect";
 import { useTranslation } from "react-i18next";
 
 type TextEntryDialogProps = {
@@ -18,6 +20,8 @@ type TextEntryDialogProps = {
   onSave: (text: string) => void;
   defaultValue?: string;
   allowEmpty?: boolean;
+  regexPattern?: RegExp;
+  regexErrorMessage?: string;
 };
 
 export default function TextEntryDialog({
@@ -28,6 +32,8 @@ export default function TextEntryDialog({
   onSave,
   defaultValue = "",
   allowEmpty = false,
+  regexPattern,
+  regexErrorMessage,
 }: TextEntryDialogProps) {
   const { t } = useTranslation("common");
 
@@ -42,8 +48,10 @@ export default function TextEntryDialog({
           defaultValue={defaultValue}
           allowEmpty={allowEmpty}
           onSave={onSave}
+          regexPattern={regexPattern}
+          regexErrorMessage={regexErrorMessage}
         >
-          <DialogFooter className="pt-4">
+          <DialogFooter className={cn("pt-4", isMobile && "gap-2")}>
             <Button type="button" onClick={() => setOpen(false)}>
               {t("button.cancel")}
             </Button>

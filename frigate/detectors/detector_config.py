@@ -3,7 +3,7 @@ import json
 import logging
 import os
 from enum import Enum
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field
@@ -25,10 +25,13 @@ class PixelFormatEnum(str, Enum):
 class InputTensorEnum(str, Enum):
     nchw = "nchw"
     nhwc = "nhwc"
+    hwnc = "hwnc"
+    hwcn = "hwcn"
 
 
 class InputDTypeEnum(str, Enum):
     float = "float"
+    float_denorm = "float_denorm"  # non-normalized float
     int = "int"
 
 
@@ -37,7 +40,6 @@ class ModelTypeEnum(str, Enum):
     rfdetr = "rfdetr"
     ssd = "ssd"
     yolox = "yolox"
-    yolov9 = "yolov9"
     yolonas = "yolonas"
     yologeneric = "yolo-generic"
 
@@ -124,6 +126,9 @@ class ModelConfig(BaseModel):
         if not self.path or not self.path.startswith("plus://"):
             return
 
+        # ensure that model cache dir exists
+        os.makedirs(MODEL_CACHE_DIR, exist_ok=True)
+
         model_id = self.path[7:]
         self.path = os.path.join(MODEL_CACHE_DIR, model_id)
         model_info_path = f"{self.path}.json"
@@ -142,7 +147,7 @@ class ModelConfig(BaseModel):
                 json.dump(model_info, f)
         else:
             with open(model_info_path, "r") as f:
-                model_info: dict[str, any] = json.load(f)
+                model_info: dict[str, Any] = json.load(f)
 
         if detector and detector not in model_info["supportedDetectors"]:
             raise ValueError(f"Model does not support detector type of {detector}")

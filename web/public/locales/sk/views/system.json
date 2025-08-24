@@ -1,0 +1,93 @@
+{
+  "documentTitle": {
+    "cameras": "Štatistiky kamier - Frigate",
+    "storage": "Štatistiky úložiska - Frigate",
+    "general": "Všeobecné štatistiky - Frigate",
+    "enrichments": "Štatistiky obohatenia - Frigate",
+    "logs": {
+      "frigate": "Protokoly Frigate - Frigate",
+      "go2rtc": "Protokoly Go2RTC - Frigate",
+      "nginx": "Protokoly Ngnix - Frigate"
+    }
+  },
+  "title": "System",
+  "metrics": "Systémové metriky",
+  "logs": {
+    "download": {
+      "label": "Stiahnúť záznamy"
+    },
+    "copy": {
+      "label": "Kopírovať do schránky",
+      "success": "Protokoly boli skopírované do schránky",
+      "error": "Nepodarilo sa skopírovať protokoly do schránky"
+    },
+    "type": {
+      "label": "Typ",
+      "timestamp": "Časová pečiatka",
+      "tag": "Šťitok (Tag)",
+      "message": "Správa"
+    },
+    "tips": "Záznamy sa streamujú zo servera",
+    "toast": {
+      "error": {
+        "fetchingLogsFailed": "Chyba pri načítaní protokolov: {{errorMessage}}",
+        "whileStreamingLogs": "Chyba pri streamovaní protokolov: {{errorMessage}}"
+      }
+    }
+  },
+  "general": {
+    "title": "Hlavný",
+    "detector": {
+      "title": "Detektory",
+      "inferenceSpeed": "Detekčná rýchlosť",
+      "temperature": "Detekčná teplota",
+      "cpuUsage": "Detektor využitia CPU",
+      "memoryUsage": "Detektor využitia pamäte"
+    },
+    "hardwareInfo": {
+      "title": "Informácie o hardvéri",
+      "gpuUsage": "Využitie GPU",
+      "gpuMemory": "Pamäť GPU",
+      "gpuEncoder": "GPU kódovač",
+      "gpuDecoder": "GPU dekodér",
+      "gpuInfo": {
+        "vainfoOutput": {
+          "title": "Výstup Vainfo",
+          "returnCode": "Návratový kód: {{code}}",
+          "processOutput": "Výstup procesu:",
+          "processError": "Chyba procesu:"
+        },
+        "nvidiaSMIOutput": {
+          "title": "Výstup Nvidia SMI",
+          "name": "Meno: {{name}}",
+          "driver": "Vodič: {{driver}}",
+          "cudaComputerCapability": "Výpočtové možnosti CUDA: {{cuda_compute}}",
+          "vbios": "Informácie o VBiose: {{vbios}}"
+        },
+        "closeInfo": {
+          "label": "Zatvorte informácie o GPU"
+        },
+        "copyInfo": {
+          "label": "Kopírovať informácie o GPU"
+        },
+        "toast": {
+          "success": "Informácie o grafickej karte boli skopírované do schránky"
+        }
+      },
+      "npuUsage": "Použitie NPU",
+      "npuMemory": "Pamäť NPU"
+    },
+    "otherProcesses": {
+      "title": "Iné procesy",
+      "processCpuUsage": "Proces využitia CPU",
+      "processMemoryUsage": "Procesné využitie pamäte"
+    }
+  },
+  "storage": {
+    "title": "Skladovanie",
+    "overview": "Prehľad",
+    "recordings": {
+      "title": "Nahrávky"
+    }
+  }
+}

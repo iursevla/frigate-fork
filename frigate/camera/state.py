@@ -5,7 +5,7 @@ import logging
 import os
 import threading
 from collections import defaultdict
-from typing import Callable
+from typing import Any, Callable
 
 import cv2
 import numpy as np
@@ -54,7 +54,7 @@ class CameraState:
         self.ptz_autotracker_thread = ptz_autotracker_thread
         self.prev_enabled = self.camera_config.enabled
 
-    def get_current_frame(self, draw_options={}):
+    def get_current_frame(self, draw_options: dict[str, Any] = {}) -> np.ndarray:
         with self.current_frame_lock:
             frame_copy = np.copy(self._current_frame)
             frame_time = self.current_frame_time
@@ -77,7 +77,9 @@ class CameraState:
                         thickness = 1
                     else:
                         thickness = 2
-                        color = self.config.model.colormap[obj["label"]]
+                        color = self.config.model.colormap.get(
+                            obj["label"], (255, 255, 255)
+                        )
                 else:
                     thickness = 1
                     color = (255, 0, 0)
@@ -99,7 +101,9 @@ class CameraState:
                     and obj["frame_time"] == frame_time
                 ):
                     thickness = 5
-                    color = self.config.model.colormap[obj["label"]]
+                    color = self.config.model.colormap.get(
+                        obj["label"], (255, 255, 255)
+                    )
 
                     # debug autotracking zooming - show the zoom factor box
                     if (
@@ -168,6 +172,7 @@ class CameraState:
                 # draw any attributes
                 for attribute in obj["current_attributes"]:
                     box = attribute["box"]
+                    box_area = int((box[2] - box[0]) * (box[3] - box[1]))
                     draw_box_with_label(
                         frame_copy,
                         box[0],
@@ -175,7 +180,7 @@ class CameraState:
                         box[2],
                         box[3],
                         attribute["label"],
-                        f"{attribute['score']:.0%}",
+                        f"{attribute['score']:.0%} {str(box_area)}",
                         thickness=thickness,
                         color=color,
                     )
@@ -223,19 +228,58 @@ class CameraState:
                 position=self.camera_config.timestamp_style.position,
             )
 
+        if draw_options.get("paths"):
+            for obj in tracked_objects.values():
+                if obj["frame_time"] == frame_time and obj["path_data"]:
+                    color = self.config.model.colormap.get(
+                        obj["label"], (255, 255, 255)
+                    )
+
+                    path_points = [
+                        (
+                            int(point[0][0] * self.camera_config.detect.width),
+                            int(point[0][1] * self.camera_config.detect.height),
+                        )
+                        for point in obj["path_data"]
+                    ]
+
+                    for point in path_points:
+                        cv2.circle(frame_copy, point, 5, color, -1)
+
+                    for i in range(1, len(path_points)):
+                        cv2.line(
+                            frame_copy,
+                            path_points[i - 1],
+                            path_points[i],
+                            color,
+                            2,
+                        )
+
+                    bottom_center = (
+                        int((obj["box"][0] + obj["box"][2]) / 2),
+                        int(obj["box"][3]),
+                    )
+                    cv2.line(
+                        frame_copy,
+                        path_points[-1],
+                        bottom_center,
+                        color,
+                        2,
+                    )
+
         return frame_copy
 
     def finished(self, obj_id):
         del self.tracked_objects[obj_id]
 
-    def on(self, event_type: str, callback: Callable[[dict], None]):
+    def on(self, event_type: str, callback: Callable):
         self.callbacks[event_type].append(callback)
 
     def update(
         self,
         frame_name: str,
         frame_time: float,
-        current_detections: dict[str, dict[str, any]],
+        current_detections: dict[str, dict[str, Any]],
         motion_boxes: list[tuple[int, int, int, int]],
         regions: list[tuple[int, int, int, int]],
     ):
@@ -251,6 +295,7 @@ class CameraState:
         updated_ids = current_ids.intersection(previous_ids)
 
         for id in new_ids:
+            logger.debug(f"{self.name}: New tracked object ID: {id}")
             new_obj = tracked_objects[id] = TrackedObject(
                 self.config.model,
                 self.camera_config,
@@ -259,14 +304,45 @@ class CameraState:
                 current_detections[id],
             )
 
+            # add initial frame to frame cache
+            logger.debug(
+                f"{self.name}: New object, adding {frame_time} to frame cache for {id}"
+            )
+            self.frame_cache[frame_time] = {
+                "frame": np.copy(current_frame),
+                "object_id": id,
+            }
+
+            # save initial thumbnail data and best object
+            thumbnail_data = {
+                "frame_time": frame_time,
+                "box": new_obj.obj_data["box"],
+                "area": new_obj.obj_data["area"],
+                "region": new_obj.obj_data["region"],
+                "score": new_obj.obj_data["score"],
+                "attributes": new_obj.obj_data["attributes"],
+                "current_estimated_speed": 0,
+                "velocity_angle": 0,
+                "path_data": [],
+                "recognized_license_plate": None,
+                "recognized_license_plate_score": None,
+            }
+            new_obj.thumbnail_data = thumbnail_data
+            tracked_objects[id].thumbnail_data = thumbnail_data
+            object_type = new_obj.obj_data["label"]
+
             # call event handlers
+            self.send_mqtt_snapshot(new_obj, object_type)
+
             for c in self.callbacks["start"]:
                 c(self.name, new_obj, frame_name)
 
         for id in updated_ids:
             updated_obj = tracked_objects[id]
-            thumb_update, significant_update, autotracker_update = updated_obj.update(
-                frame_time, current_detections[id], current_frame is not None
+            thumb_update, significant_update, path_update, autotracker_update = (
+                updated_obj.update(
+                    frame_time, current_detections[id], current_frame is not None
+                )
             )
 
             if autotracker_update or significant_update:
@@ -279,17 +355,28 @@ class CameraState:
                     updated_obj.thumbnail_data["frame_time"] == frame_time
                     and frame_time not in self.frame_cache
                 ):
-                    self.frame_cache[frame_time] = np.copy(current_frame)
+                    logger.debug(
+                        f"{self.name}: Existing object, adding {frame_time} to frame cache for {id}"
+                    )
+                    self.frame_cache[frame_time] = {
+                        "frame": np.copy(current_frame),
+                        "object_id": id,
+                    }
 
                 updated_obj.last_updated = frame_time
 
             # if it has been more than 5 seconds since the last thumb update
             # and the last update is greater than the last publish or
-            # the object has changed significantly
+            # the object has changed significantly or
+            # the object moved enough to update the path
             if (
-                frame_time - updated_obj.last_published > 5
-                and updated_obj.last_updated > updated_obj.last_published
-            ) or significant_update:
+                (
+                    frame_time - updated_obj.last_published > 5
+                    and updated_obj.last_updated > updated_obj.last_published
+                )
+                or significant_update
+                or path_update
+            ):
                 # call event handlers
                 for c in self.callbacks["update"]:
                     c(self.name, updated_obj, frame_name)
@@ -300,12 +387,13 @@ class CameraState:
             removed_obj = tracked_objects[id]
             if "end_time" not in removed_obj.obj_data:
                 removed_obj.obj_data["end_time"] = frame_time
+                logger.debug(f"{self.name}: end callback for object {id}")
                 for c in self.callbacks["end"]:
                     c(self.name, removed_obj, frame_name)
 
         # TODO: can i switch to looking this up and only changing when an event ends?
         # maintain best objects
-        camera_activity: dict[str, list[any]] = {
+        camera_activity: dict[str, list[Any]] = {
             "motion": len(motion_boxes) > 0,
             "objects": [],
         }
@@ -366,13 +454,9 @@ class CameraState:
                     or (now - current_best.thumbnail_data["frame_time"])
                     > self.camera_config.best_image_timeout
                 ):
-                    self.best_objects[object_type] = obj
-                    for c in self.callbacks["snapshot"]:
-                        c(self.name, self.best_objects[object_type], frame_name)
+                    self.send_mqtt_snapshot(obj, object_type)
             else:
-                self.best_objects[object_type] = obj
-                for c in self.callbacks["snapshot"]:
-                    c(self.name, self.best_objects[object_type], frame_name)
+                self.send_mqtt_snapshot(obj, object_type)
 
         for c in self.callbacks["camera_activity"]:
             c(self.name, camera_activity)
@@ -381,7 +465,7 @@ class CameraState:
         current_thumb_frames = {
             obj.thumbnail_data["frame_time"]
             for obj in tracked_objects.values()
-            if not obj.false_positive and obj.thumbnail_data is not None
+            if obj.thumbnail_data is not None
         }
         current_best_frames = {
             obj.thumbnail_data["frame_time"] for obj in self.best_objects.values()
@@ -391,7 +475,20 @@ class CameraState:
             for t in self.frame_cache.keys()
             if t not in current_thumb_frames and t not in current_best_frames
         ]
+        if len(thumb_frames_to_delete) > 0:
+            logger.debug(f"{self.name}: Current frame cache contents:")
+            for k, v in self.frame_cache.items():
+                logger.debug(f"  frame time: {k}, object id: {v['object_id']}")
+            for obj_id, obj in tracked_objects.items():
+                thumb_time = (
+                    obj.thumbnail_data["frame_time"] if obj.thumbnail_data else None
+                )
+                logger.debug(
+                    f"{self.name}: Tracked object {obj_id} thumbnail frame_time: {thumb_time}, false positive: {obj.false_positive}"
+                )
         for t in thumb_frames_to_delete:
+            object_id = self.frame_cache[t].get("object_id", "unknown")
+            logger.debug(f"{self.name}: Deleting {t} from frame cache for {object_id}")
             del self.frame_cache[t]
 
         with self.current_frame_lock:
@@ -407,6 +504,20 @@ class CameraState:
                     self.frame_manager.close(self.previous_frame_id)
 
             self.previous_frame_id = frame_name
+
+    def send_mqtt_snapshot(self, new_obj: TrackedObject, object_type: str) -> None:
+        for c in self.callbacks["snapshot"]:
+            updated = c(self.name, new_obj)
+
+            # if the snapshot was not updated, then this object is not a best object
+            # but all new objects should be considered the next best object
+            # so we remove the label from the best objects
+            if updated:
+                self.best_objects[object_type] = new_obj
+            else:
+                if object_type in self.best_objects:
+                    self.best_objects.pop(object_type)
+                break
 
     def save_manual_event_image(
         self,

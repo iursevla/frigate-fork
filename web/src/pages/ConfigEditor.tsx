@@ -16,6 +16,8 @@ import { MdOutlineRestartAlt } from "react-icons/md";
 import RestartDialog from "@/components/overlay/dialog/RestartDialog";
 import { useTranslation } from "react-i18next";
 import { useRestart } from "@/api/ws";
+import { useResizeObserver } from "@/hooks/resize-observer";
+import { FrigateConfig } from "@/types/frigateConfig";
 
 type SaveOptions = "saveonly" | "restart";
 
@@ -32,7 +34,10 @@ function ConfigEditor() {
     document.title = t("documentTitle");
   }, [t]);
 
-  const { data: config } = useSWR<string>("config/raw");
+  const { data: config } = useSWR<FrigateConfig>("config", {
+    revalidateOnFocus: false,
+  });
+  const { data: rawConfig } = useSWR<string>("config/raw");
 
   const { theme, systemTheme } = useTheme();
   const [error, setError] = useState<string | undefined>();
@@ -102,7 +107,7 @@ function ConfigEditor() {
   }, [onHandleSaveConfig]);
 
   useEffect(() => {
-    if (!config) {
+    if (!rawConfig) {
       return;
     }
 
@@ -129,9 +134,9 @@ function ConfigEditor() {
     }
 
     if (!modelRef.current) {
-      modelRef.current = monaco.editor.createModel(config, "yaml", modelUri);
+      modelRef.current = monaco.editor.createModel(rawConfig, "yaml", modelUri);
     } else {
-      modelRef.current.setValue(config);
+      modelRef.current.setValue(rawConfig);
     }
 
     const container = configRef.current;
@@ -143,6 +148,12 @@ function ConfigEditor() {
         scrollBeyondLastLine: false,
         theme: (systemTheme || theme) == "dark" ? "vs-dark" : "vs-light",
       });
+      editorRef.current?.addCommand(
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+        () => {
+          onHandleSaveConfig("saveonly");
+        },
+      );
     } else if (editorRef.current) {
       editorRef.current.setModel(modelRef.current);
     }
@@ -158,32 +169,32 @@ function ConfigEditor() {
       }
       schemaConfiguredRef.current = false;
     };
-  }, [config, apiHost, systemTheme, theme]);
+  }, [rawConfig, apiHost, systemTheme, theme, onHandleSaveConfig]);
 
   // monitoring state
 
   const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
-    if (!config || !modelRef.current) {
+    if (!rawConfig || !modelRef.current) {
       return;
     }
 
     modelRef.current.onDidChangeContent(() => {
-      if (modelRef.current?.getValue() != config) {
+      if (modelRef.current?.getValue() != rawConfig) {
         setHasChanges(true);
       } else {
         setHasChanges(false);
       }
     });
-  }, [config]);
+  }, [rawConfig]);
 
   useEffect(() => {
-    if (config && modelRef.current) {
-      modelRef.current.setValue(config);
+    if (rawConfig && modelRef.current) {
+      modelRef.current.setValue(rawConfig);
       setHasChanges(false);
     }
-  }, [config]);
+  }, [rawConfig]);
 
   useEffect(() => {
     let listener: ((e: BeforeUnloadEvent) => void) | undefined;
@@ -191,7 +202,7 @@ function ConfigEditor() {
       listener = (e) => {
         e.preventDefault();
         e.returnValue = true;
-        return "Exit without saving?";
+        return t("confirm");
       };
       window.addEventListener("beforeunload", listener);
     }
@@ -201,19 +212,41 @@ function ConfigEditor() {
         window.removeEventListener("beforeunload", listener);
       }
     };
-  }, [hasChanges]);
+  }, [hasChanges, t]);
 
-  if (!config) {
+  // layout change handler
+
+  const [{ width, height }] = useResizeObserver(configRef);
+
+  useEffect(() => {
+    if (editorRef.current) {
+      // Small delay to ensure DOM has updated
+      const timeoutId = setTimeout(() => {
+        editorRef.current?.layout();
+      }, 0);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [error, width, height]);
+
+  if (!rawConfig) {
     return <ActivityIndicator />;
   }
 
   return (
     <div className="absolute bottom-2 left-0 right-0 top-2 md:left-2">
-      <div className="relative h-full overflow-hidden">
+      <div className="relative flex h-full flex-col overflow-hidden">
         <div className="mr-1 flex items-center justify-between">
-          <Heading as="h2" className="mb-0 ml-1 md:ml-0">
-            {t("configEditor")}
-          </Heading>
+          <div>
+            <Heading as="h2" className="mb-0 ml-1 md:ml-0">
+              {t(config?.safe_mode ? "safeConfigEditor" : "configEditor")}
+            </Heading>
+            {config?.safe_mode && (
+              <div className="text-sm text-secondary-foreground">
+                {t("safeModeDescription")}
+              </div>
+            )}
+          </div>
           <div className="flex flex-row gap-1">
             <Button
               size="sm"
@@ -248,13 +281,14 @@ function ConfigEditor() {
           </div>
         </div>
 
-        {error && (
-          <div className="mt-2 max-h-[30%] overflow-auto whitespace-pre-wrap border-2 border-muted bg-background_alt p-4 text-sm text-danger md:max-h-[40%]">
-            {error}
-          </div>
-        )}
-
-        <div ref={configRef} className="mt-2 h-[calc(100%-2.75rem)]" />
+        <div className="mt-2 flex flex-1 flex-col overflow-hidden">
+          {error && (
+            <div className="mt-2 max-h-[30%] min-h-[2.5rem] overflow-auto whitespace-pre-wrap border-2 border-muted bg-background_alt p-4 text-sm text-danger md:max-h-[40%]">
+              {error}
+            </div>
+          )}
+          <div ref={configRef} className="flex-1 overflow-hidden" />
+        </div>
       </div>
       <Toaster closeButton={true} />
       <RestartDialog

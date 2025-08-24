@@ -6,20 +6,23 @@
     "classification": "分类设置 - Frigate",
     "masksAndZones": "遮罩和区域编辑器 - Frigate",
     "motionTuner": "运动调整器 - Frigate",
-    "object": "对象设置 - Frigate",
+    "object": "调试 - Frigate",
     "general": "常规设置 - Frigate",
-    "frigatePlus": "Frigate+ 设置 - Frigate"
+    "frigatePlus": "Frigate+ 设置 - Frigate",
+    "notifications": "通知设置 - Frigate",
+    "enrichments": "增强功能设置 - Frigate"
   },
   "menu": {
-    "uiSettings": "界面设置",
-    "classificationSettings": "分类设置",
-    "cameraSettings": "摄像头设置",
+    "ui": "界面设置",
+    "classification": "分类设置",
+    "cameras": "摄像头设置",
     "masksAndZones": "遮罩/ 区域",
     "motionTuner": "运动调整器",
     "debug": "调试",
     "users": "用户",
     "notifications": "通知",
-    "frigateplus": "Frigate+"
+    "frigateplus": "Frigate+",
+    "enrichments": "增强功能"
   },
   "dialog": {
     "unsavedChanges": {
@@ -40,8 +43,8 @@
         "desc": "检测到画面活动时将自动切换至该摄像头实时画面。禁用此选项会导致实时监控页面的摄像头图像每分钟只更新一次。"
       },
       "playAlertVideos": {
-        "label": "播放警告视频",
-        "desc": "默认情况下，实时监控页面上的最新警告会以一小段循环的形式进行播放。禁用此选项将仅显示浏览器本地缓存的静态图片。"
+        "label": "播放警报视频",
+        "desc": "默认情况下，实时监控页面上的最新警报会以一小段循环视频的形式进行播放。禁用此选项将仅显示浏览器本地缓存的静态图片。"
       }
     },
     "storedLayouts": {
@@ -87,13 +90,19 @@
       "title": "语义搜索",
       "desc": "Frigate的语义搜索能够让你使用自然语言根据图像本身、自定义的文本描述或自动生成的描述来搜索视频。",
       "readTheDocumentation": "阅读文档（英文）",
-      "reindexOnStartup": {
-        "label": "启动时重新索引",
-        "desc": "每次启动将重新索引并重新处理所有缩略图和描述。<em>关闭该设置后不要忘记重启！</em>"
+      "reindexNow": {
+        "label": "立即重建索引",
+        "desc": "重建索引将为所有跟踪对象重新生成特征向量。该过程将在后台运行，可能会使CPU满载，所需时间取决于跟踪对象的数量。",
+        "confirmTitle": "确认重建索引",
+        "confirmDesc": "确定要为所有跟踪对象重建特征向量索引吗？此过程将在后台运行，但可能会导致CPU满载并耗费较长时间。您可以在 浏览 页面查看进度。",
+        "confirmButton": "重建索引",
+        "success": "重建索引已成功启动。",
+        "alreadyInProgress": "重建索引已在执行中。",
+        "error": "启动重建索引失败：{{errorMessage}}"
       },
       "modelSize": {
         "label": "模型大小",
-        "desc": "用于语义搜索的语言模型大小",
+        "desc": "用于语义搜索的语言模型大小。",
         "small": {
           "title": "小",
           "desc": "使用 <strong>小</strong>模型。该模型将使用较少的内存，在CPU上也能较快的运行。质量较好。"
@@ -109,16 +118,16 @@
       "desc": "人脸识别功能允许为人物分配名称，当识别到他们的面孔时，Frigate 会将人物的名字作为子标签进行分配。这些信息会显示在界面、过滤器以及通知中。",
       "readTheDocumentation": "阅读文档（英文）",
       "modelSize": {
-          "label": "模型大小",
-          "desc": "用于人脸识别的模型尺寸。",
-          "small": {
-              "title": "小模型",
-              "desc": "使用<em>小模型</em>将采用OpenCV的局部二值模式直方图(LBPH)算法，可在大多数CPU上高效运行。"
-          },
-          "large": {
-              "title": "大模型",
-              "desc": "使用<em>大模型</em>将采用ArcFace人脸嵌入模型，若适用将自动在GPU上运行。"
-          }
+        "label": "模型大小",
+        "desc": "用于人脸识别的模型尺寸。",
+        "small": {
+          "title": "小",
+          "desc": "使用<b>小</b>模型将采用FaceNet人脸特征提取模型，可在大多数CPU上高效运行。"
+        },
+        "large": {
+          "title": "大",
+          "desc": "使用<b>大</b>模型将采用ArcFace人脸特征提取模型，若条件允许将自动使用GPU运行。"
+        }
       }
     },
     "licensePlateRecognition": {
@@ -129,38 +138,82 @@
     "toast": {
       "success": "分类设置已保存，请重启 Frigate 以应用更改。",
       "error": "保存配置更改失败：{{errorMessage}}"
-    }
+    },
+    "birdClassification": {
+      "title": "鸟类识别分类",
+      "desc": "鸟类识别分类采用量化TensorFlow模型识别已知鸟类。当识别到已知鸟类时，其通用名称将作为子标签(sub_label)添加。该信息将显示在用户界面、过滤器及通知中。"
+    },
+    "restart_required": "需要重启（分类设置已修改）",
+    "unsavedChanges": "分类设置未保存"
   },
   "camera": {
     "title": "摄像头设置",
     "streams": {
       "title": "视频流",
-      "desc": "禁用摄像头将完全停止 Frigate 对该摄像头视频流的处理。检测、录制和调试功能都将不可用。<br /><em>注意：该选项不会禁用 go2rtc 转播。</em>"
+      "desc": "暂时禁用摄像头，除非重启Frigate否则将保持禁用。禁用摄像头将完全停止 Frigate 对该摄像头视频流的处理。检测、录制和调试功能都将不可用。<br /><em>注意：该选项不会禁用 go2rtc 转播。</em>"
     },
     "review": {
-      "title": "预览",
-      "desc": "启用/禁用摄像头的警报和检测。禁用后，不会生成新的预览项。",
-      "alerts": "警告 ",
+      "title": "核查",
+      "desc": "启用/禁用摄像头的警报和检测。禁用后，除非重启Frigate，否则不会生成新的核查项。 ",
+      "alerts": "警报 ",
       "detections": "检测 "
     },
     "reviewClassification": {
-      "title": "预览分级",
-      "desc": "Frigate 将回放项目分为“警告”和“检测”。默认情况下，所有的 <em>人</em>、<em>汽车</em> 的对象都视为警告。你可以通过修改配置文件配置区域来细分。",
-      "readTheDocumentation": "阅读文档（英文）",
+      "title": "核查分级",
+      "desc": "Frigate 将核查项分为“警报”和“检测”。默认情况下，所有的 <strong>人</strong>、<strong>汽车</strong> 对象都将视为警报。你可以通过修改配置文件配置区域来细分。",
+      "readTheDocumentation": "阅读文档",
       "noDefinedZones": "该摄像头没有设置区域。",
-      "objectAlertsTips": "所有的 {{alertsLabels}} 对象在 {{cameraName}} 都将显示为警告。",
-      "zoneObjectAlertsTips": "所有的 {{alertsLabels}} 对象在 {{cameraName}} 的 {{zone}} 区域都将显示为警告。",
-      "objectDetectionsTips": "所有未在 {{cameraName}} 归类的 {{detectionsLabels}} 对象，无论它位于哪个区域，都将显示为检测。",
+      "objectAlertsTips": "所有 {{alertsLabels}} 对象在 {{cameraName}} 下都将显示为警报。",
+      "zoneObjectAlertsTips": "所有 {{alertsLabels}} 对象在 {{cameraName}} 下的 {{zone}} 区内都将显示为警报。",
+      "objectDetectionsTips": "所有未在 {{cameraName}} 归类的 {{detectionsLabels}} 对象，无论它位于哪个区，都将显示为检测。",
       "zoneObjectDetectionsTips": {
-        "text": "所有未在 {{cameraName}} 上归类为 {{detectionsLabels}} 的对象在 {{zone}} 区域都将显示为检测。",
-        "notSelectDetections": "所有在 {{cameraName}} 的 {{zone}} 上检测到的未归类为警告的 {{detectionsLabels}} 对象，无论它位于哪个区域，都将显示为检测。",
+        "text": "所有未在 {{cameraName}} 上归类为 {{detectionsLabels}} 的对象在 {{zone}} 区都将显示为检测。",
+        "notSelectDetections": "所有在 {{cameraName}} 下的 {{zone}} 区内检测到的 {{detectionsLabels}} 对象，如果它未归类为警报，无论它位于哪个区，都将显示为检测。",
         "regardlessOfZoneObjectDetectionsTips": "所有未在 {{cameraName}} 归类的 {{detectionsLabels}} 对象，无论它位于哪个区域，都将显示为检测。"
       },
-      "selectAlertsZones": "选择要显示为警告的区域",
+      "selectAlertsZones": "选择警报区",
       "selectDetectionsZones": "选择检测区域",
       "limitDetections": "限制仅在特定区域内进行检测",
       "toast": {
-        "success": "预览分级配置已保存。请重启 Frigate 以应用更改。"
+        "success": "核查分级配置已保存。请重启 Frigate 以应用更改。"
+      },
+      "unsavedChanges": "{{camera}} 的核查分类设置未保存"
+    },
+    "object_descriptions": {
+      "title": "生成式AI对象描述",
+      "desc": "临时启用/禁用此摄像头的生成式AI对象描述功能。禁用后，系统将不再请求该摄像头追踪对象的AI生成描述。"
+    },
+    "review_descriptions": {
+      "title": "生成式AI核查描述",
+      "desc": "临时启用/禁用本摄像头的生成式AI核查描述功能。禁用后，系统将不再为该摄像头的核查项目请求AI生成的描述内容。"
+    },
+    "addCamera": "添加新摄像头",
+    "editCamera": "编辑摄像头：",
+    "selectCamera": "选择摄像头",
+    "backToSettings": "返回摄像头设置",
+    "cameraConfig": {
+      "add": "添加摄像头",
+      "edit": "编辑摄像头",
+      "description": "配置摄像头设置，包括视频流输入和视频流功能选择。",
+      "name": "摄像头名称",
+      "nameRequired": "摄像头名称为必填项",
+      "nameInvalid": "摄像头名称只能包含字母、数字、下划线或连字符",
+      "namePlaceholder": "比如：front_door",
+      "enabled": "开启",
+      "ffmpeg": {
+        "inputs": "视频流输入",
+        "path": "视频流路径",
+        "pathRequired": "视频流路径为必填项",
+        "pathPlaceholder": "rtsp://...",
+        "roles": "功能",
+        "rolesRequired": "至少需要指定一个功能",
+        "rolesUnique": "每个功能（音频、检测、录制）只能用于一个视频流，不能够重复分配到多个视频流",
+        "addInput": "添加视频流输入",
+        "removeInput": "移除视频流输入",
+        "inputsRequired": "至少需要一个视频流"
+      },
+      "toast": {
+        "success": "摄像头 {{cameraName}} 保存已保存"
       }
     }
   },
@@ -219,6 +272,11 @@
         "error": {
           "mustBeFinished": "多边形绘制必须完成闭合后才能保存。"
         }
+      },
+      "speed": {
+        "error": {
+          "mustBeGreaterOrEqualTo": "速度阈值必须大于或等于0.1。"
+        }
       }
     },
     "zones": {
@@ -226,17 +284,16 @@
       "documentTitle": "编辑区域 - Frigate",
       "desc": {
         "title": "该功能允许你定义特定区域，以便你可以确定特定对象是否在该区域内。",
-        "documentation": "文档（英文）"
+        "documentation": "文档"
       },
       "add": "添加区域",
       "edit": "编辑区域",
-      "point_one": "{{count}} 点",
       "point_other": "{{count}} 点",
       "clickDrawPolygon": "在图像上点击添加点绘制多边形区域。",
       "name": {
         "title": "区域名称",
-        "inputPlaceHolder": "请输入名称",
-        "tips": "名称至少包含两个字符，且不能和摄像头或其他区域同名。<br>当前仅支持英文与数字组合"
+        "inputPlaceHolder": "请输入名称…",
+        "tips": "名称至少包含两个字符，且不能和摄像头或其他区域同名。<br>当前仅支持英文与数字组合。"
       },
       "inertia": {
         "title": "惯性",
@@ -253,7 +310,12 @@
       "allObjects": "所有对象",
       "speedEstimation": {
         "title": "速度估算",
-        "desc": "启用此区域内物体的速度估算。该区域必须恰好包含 4 个点。"
+        "desc": "启用此区域内物体的速度估算。该区域必须恰好包含 4 个点。",
+        "docs": "阅读文档",
+        "lineBDistance": "B线距离（{{unit}}）",
+        "lineCDistance": "C线距离（{{unit}}）",
+        "lineDDistance": "D线距离（{{unit}}）",
+        "lineADistance": "A线距离（{{unit}}）"
       },
       "speedThreshold": {
         "title": "速度阈值 ({{unit}})",
@@ -273,22 +335,21 @@
       "label": "运动遮罩",
       "documentTitle": "编辑运动遮罩 - Frigate",
       "desc": {
-        "title": "运动遮罩用于防止触发不必要的运动类型。过度的设置遮罩将使对象更加难以被追踪",
-        "documentation": "文档（英文）"
+        "title": "运动遮罩用于防止触发不必要的运动类型。过度的设置遮罩将使对象更加难以被追踪。",
+        "documentation": "文档"
       },
       "add": "添加运动遮罩",
       "edit": "编辑运动遮罩",
       "context": {
-        "title": "运动遮罩用于防止不需要的运动类型触发检测（例如：树枝、摄像头显示的时间等）。运动遮罩需要<strong>谨慎使用</strong>，过度的遮罩会导致追踪对象变得更加困难。",
-        "documentation": "阅读文档（英文）"
+        "title": "运动遮罩用于防止不需要的运动类型触发检测（例如：树枝、摄像头画面显示的时间等）。运动遮罩需要<strong>谨慎使用</strong>，过度的遮罩会导致追踪对象变得更加困难。",
+        "documentation": "阅读文档"
       },
-      "point_one": "{{count}} 点",
       "point_other": "{{count}} 点",
       "clickDrawPolygon": "在图像上点击添加点绘制多边形区域。",
       "polygonAreaTooLarge": {
         "title": "运动遮罩的大小达到了摄像头画面的{{polygonArea}}%。不建议设置太大的运动遮罩。",
         "tips": "运动遮罩不会阻止检测到对象，你应该使用区域来限制检测对象。",
-        "documentation": "阅读文档（英文）"
+        "documentation": "阅读文档"
       },
       "toast": {
         "success": {
@@ -302,17 +363,16 @@
       "documentTitle": "编辑对象遮罩 - Frigate",
       "desc": {
         "title": "对象过滤器用于防止特定位置的指定对象被误报。",
-        "documentation": "文档（英文）"
+        "documentation": "文档"
       },
       "add": "添加对象遮罩",
       "edit": "编辑对象遮罩",
       "context": "对象过滤器用于防止特定位置的指定对象被误报。",
-      "point_one": "{{count}} 点",
       "point_other": "{{count}} 点",
       "clickDrawPolygon": "在图像上点击添加点绘制多边形区域。",
       "objects": {
         "title": "对象",
-        "desc": "将应用于此对象遮罩的对象列表。",
+        "desc": "将应用于此对象遮罩的对象类型。",
         "allObjectTypes": "所有对象类型"
       },
       "toast": {
@@ -321,13 +381,16 @@
           "noName": "对象遮罩已保存。请重启 Frigate 以应用更改。"
         }
       }
-    }
+    },
+    "restart_required": "需要重启（遮罩与区域已修改）",
+    "motionMaskLabel": "运动遮罩 {{number}}",
+    "objectMaskLabel": "对象遮罩 {{number}}（{{label}}）"
   },
   "motionDetectionTuner": {
     "title": "运动检测调整器",
     "desc": {
       "title": "Frigate 将使用运动检测作为首个步骤，以确认一帧画面中是否有对象需要使用对象检测。",
-      "documentation": "阅读有关运动检测的文档（英文）"
+      "documentation": "阅读有关运动检测的文档"
     },
     "Threshold": {
       "title": "阈值",
@@ -343,11 +406,12 @@
     },
     "toast": {
       "success": "运动设置已保存。"
-    }
+    },
+    "unsavedChanges": "{{camera}} 的运动调整器设置未保存"
   },
   "debug": {
     "title": "调试",
-    "detectorDesc": "Frigate 将使用探测器（{{detectors}}）来检测摄像头视频流中的对象。",
+    "detectorDesc": "Frigate 将使用检测器（{{detectors}}）来检测摄像头视频流中的对象。",
     "desc": "调试界面将实时显示被追踪的对象以及统计信息，对象列表将显示检测到的对象和延迟显示的概览。",
     "debugging": "调试选项",
     "objectList": "对象列表",
@@ -375,21 +439,26 @@
     "motion": {
       "title": "运动区域框",
       "desc": "在检测到运动的区域显示区域框",
-      "tips": "<p className=\"mb-2\"><strong>运动区域框</strong></p><br><p>将在当前检测到运动的区域内显示红色区域框。</p>"
+      "tips": "<p><strong>运动区域框</strong></p><br><p>将在当前检测到运动的区域内显示红色区域框。</p>"
     },
     "regions": {
       "title": "范围",
-      "desc": "显示发送到运动检测器感兴趣范围的框。",
-      "tips": "<p className=\"mb-2\"><strong>范围框</strong></p><br><p>将在帧中发送到目标检测器的感兴趣范围上叠加绿色框。</p>"
+      "desc": "显示发送到运动检测器感兴趣范围的框",
+      "tips": "<p><strong>范围框</strong></p><br><p>将在帧中发送到目标检测器的感兴趣范围上叠加绿色框。</p>"
     },
     "objectShapeFilterDrawing": {
       "title": "允许绘制“对象形状过滤器”",
-      "desc": "在图像上绘制矩形，以查看区域和比例详细信息。",
+      "desc": "在图像上绘制矩形，以查看区域和比例详细信息",
       "tips": "启用此选项，能够在摄像头图像上绘制矩形，将显示其区域和比例。然后，您可以使用这些值在配置中设置对象形状过滤器参数。",
-      "document": "阅读文档（英文）",
+      "document": "阅读文档 ",
       "score": "分数",
       "ratio": "比例",
       "area": "区域"
+    },
+    "paths": {
+      "title": "运动轨迹",
+      "desc": "显示被追踪对象运动轨迹的关键点",
+      "tips": "<p><strong>运动轨迹</strong></p><p>将使用线条和圆圈标示被追踪对象在其活动周期内移动的关键位置点。</p>"
     }
   },
   "users": {
@@ -404,7 +473,7 @@
       "success": {
         "createUser": "用户 {{user}} 创建成功",
         "deleteUser": "用户 {{user}} 删除成功",
-        "updatePassword": "已成功修改密码",
+        "updatePassword": "已成功修改密码。",
         "roleUpdated": "已更新 {{user}} 的权限组"
       },
       "error": {
@@ -438,7 +507,7 @@
             "placeholder": "请再次输入密码"
           },
           "strength": {
-            "title": "密码强度：",
+            "title": "密码强度： ",
             "weak": "弱",
             "medium": "中等",
             "strong": "强",
@@ -454,27 +523,38 @@
             "placeholder": "请再次输入新密码"
           }
         },
-        "usernameIsRequired": "用户名为必填项"
+        "usernameIsRequired": "用户名为必填项",
+        "passwordIsRequired": "必须输入密码"
       },
       "createUser": {
         "title": "创建新用户",
         "desc": "创建一个新用户账户，并指定一个角色以控制访问 Frigate UI 的权限。",
-        "usernameOnlyInclude": "用户名只能包含字母、数字和 _"
+        "usernameOnlyInclude": "用户名只能包含字母、数字和 _",
+        "confirmPassword": "请确认你的密码"
       },
       "deleteUser": {
         "title": "删除该用户",
         "desc": "此操作无法撤销。这将永久删除用户账户并移除所有相关数据。",
-        "warn": "你确定要删除 <span className=\"font-bold\">{{username}}</span> 吗？"
+        "warn": "你确定要删除 <strong>{{username}}</strong> 吗？"
       },
       "passwordSetting": {
         "updatePassword": "更新 {{username}} 的密码",
         "setPassword": "设置密码",
-        "desc": "创建一个强密码来保护此账户。"
+        "desc": "创建一个强密码来保护此账户。",
+        "doNotMatch": "两次输入密码不匹配",
+        "cannotBeEmpty": "密码不能为空"
       },
       "changeRole": {
         "title": "更改用户权限组",
-        "desc": "更新 <span className=\"font-medium\">{{username}}</span> 的权限",
-        "roleInfo": "<p>请选择此用户的适当角色：</p><ul className=\"mt-2 space-y-1 pl-5\"><li> • <span className=\"font-medium\">管理员 (Admin)：</span> 拥有所有功能的完整访问权限。</li><li> • <span className=\"font-medium\">查看者 (Viewer)：</span> 仅限访问实时监控、回放、探测和导出功能。</li></ul>"
+        "desc": "更新 <strong>{{username}}</strong> 的权限",
+        "roleInfo": {
+          "admin": "管理员",
+          "viewer": "成员",
+          "viewerDesc": "仅能够查看实时监控面板、核查、浏览和导出功能。",
+          "adminDesc": "完全功能与访问权限。",
+          "intro": "为该用户选择一个合适的权限组："
+        },
+        "select": "选择权限组"
       }
     }
   },
@@ -483,7 +563,7 @@
     "notificationSettings": {
       "title": "通知设置",
       "desc": "Frigate 在浏览器中运行或作为 PWA 安装时，可以原生向您的设备发送推送通知。",
-      "documentation": "阅读文档（英文）"
+      "documentation": "阅读文档"
     },
     "globalSettings": {
       "title": "全局设置",
@@ -491,8 +571,8 @@
     },
     "notificationUnavailable": {
       "title": "通知功能不可用",
-      "desc": "网页推送通知需要安全连接（<code>https://...</code>）。这是浏览器的限制。请通过安全方式访问 Frigate 以使用通知功能。",
-      "documentation": "阅读文档（英文）"
+      "desc": "网页推送通知需要安全连接（<code>https://…</code>）。这是浏览器的限制。请通过安全方式访问 Frigate 以使用通知功能。",
+      "documentation": "阅读文档"
     },
     "email": {
       "title": "电子邮箱",
@@ -517,7 +597,8 @@
       "1hour": "暂停 1 小时",
       "12hours": "暂停 12 小时",
       "24hours": "暂停 24 小时",
-      "untilRestart": "暂停直到重启"
+      "untilRestart": "暂停直到重启",
+      "suspend": "暂停"
     },
     "cancelSuspension": "取消暂停",
     "toast": {
@@ -528,7 +609,9 @@
       "error": {
         "registerFailed": "通知注册失败。"
       }
-    }
+    },
+    "unsavedRegistrations": "未保存通知注册",
+    "unsavedChanges": "未保存通知设置更改"
   },
   "frigatePlus": {
     "title": "Frigate+ 设置",
@@ -543,7 +626,7 @@
       "title": "快照配置",
       "desc": "提交到 Frigate+ 需要同时在配置中启用快照和 <code>clean_copy</code> 快照。",
       "documentation": "阅读文档",
-      "cleanCopyWarning": "部分摄像头已启用快照但未启用 <code>clean_copy</code>。您需要在快照配置中启用 <code>clean_copy</code>，才能将这些摄像头的图像提交到 Frigate+。",
+      "cleanCopyWarning": "部分摄像头已启用快照但未启用 clean_copy。您需要在快照配置中启用 <code>clean_copy</code>，才能将这些摄像头的图像提交到 Frigate+。",
       "table": {
         "camera": "摄像头",
         "snapshots": "快照",
@@ -558,15 +641,178 @@
       "supportedDetectors": "支持的检测器",
       "dimensions": "大小",
       "cameras": "摄像头",
-      "loading": "正在加载模型信息...",
+      "loading": "正在加载模型信息…",
       "error": "加载模型信息失败",
       "availableModels": "可用模型",
-      "loadingAvailableModels": "正在加载可用模型...",
-      "modelSelect": "您可以在Frigate+上选择可用的模型。请注意，只能选择与当前探测器配置兼容的模型。"
+      "loadingAvailableModels": "正在加载可用模型…",
+      "modelSelect": "您可以在Frigate+上选择可用的模型。请注意，只能选择与当前检测器配置兼容的模型。",
+      "plusModelType": {
+        "baseModel": "基础模型",
+        "userModel": "定向调优"
+      }
     },
     "toast": {
-        "success": "Frigate+ 设置已保存。请重启 Frigate 以应用更改。",
-        "error": "配置更改保存失败：{{errorMessage}}"
+      "success": "Frigate+ 设置已保存。请重启 Frigate 以应用更改。",
+      "error": "配置更改保存失败：{{errorMessage}}"
+    },
+    "restart_required": "需要重启（Frigate+模型已修改）",
+    "unsavedChanges": "未保存Frigate+变更设置"
+  },
+  "enrichments": {
+    "title": "增强功能设置",
+    "birdClassification": {
+      "desc": "鸟类分类通过量化的TensorFlow模型识别已知鸟类。当识别到已知鸟类时，其通用名称将作为子标签（sub_label）添加。此信息包含在用户界面、筛选器以及通知中。",
+      "title": "鸟类分类"
+    },
+    "semanticSearch": {
+      "reindexNow": {
+        "desc": "重建索引将为所有跟踪对象重新生成特征向量。该过程将在后台运行，可能会使CPU满载，所需时间取决于跟踪对象的数量。",
+        "label": "立即重建索引",
+        "confirmTitle": "确认重建索引",
+        "confirmDesc": "确定要为所有跟踪对象重建特征向量索引吗？此过程将在后台运行，但可能会导致CPU满载并耗费较长时间。您可以在 浏览 页面查看进度。",
+        "confirmButton": "重建索引",
+        "success": "重建索引已成功启动。",
+        "alreadyInProgress": "重建索引已在执行中。",
+        "error": "启动重建索引失败：{{errorMessage}}"
+      },
+      "modelSize": {
+        "label": "模型大小",
+        "desc": "用于语义搜索的语言模型大小。",
+        "small": {
+          "title": "小",
+          "desc": "将使用 <strong>小</strong>模型。该模型将使用少量的内存，在CPU上也能较快的运行，质量较好。"
+        },
+        "large": {
+          "title": "大",
+          "desc": "将使用 <strong>大</strong>模型。该选项使用了完整的Jina模型，在合适的时候将自动使用GPU。"
+        }
+      },
+      "title": "分类搜索",
+      "desc": "Frigate中的语义搜索功能允许您通过使用图像本身、用户自定义的文本描述，或自动生成的文本描述等方式在核查项目中查找被追踪对象。",
+      "readTheDocumentation": "阅读文档"
+    },
+    "licensePlateRecognition": {
+      "desc": "Frigate 可以识别车辆的车牌，并自动将检测到的字符添加到 recognized_license_plate 字段中，或将已知名称作为子标签添加到汽车类型的对象中。常见的使用场景可能是读取驶入车道的汽车车牌或经过街道的汽车车牌。",
+      "title": "车牌识别",
+      "readTheDocumentation": "阅读文档"
+    },
+    "faceRecognition": {
+      "desc": "人脸识别功能允许为人物分配名称，当识别到他们的面孔时，Frigate 会将人物的名字作为子标签进行分配。这些信息会显示在界面、过滤器以及通知中。",
+      "title": "人脸识别",
+      "readTheDocumentation": "阅读文档",
+      "modelSize": {
+        "label": "模型大小",
+        "desc": "用于人脸识别的模型大小。",
+        "small": {
+          "title": "小",
+          "desc": "将使用<strong>小</strong>模型。该选项采用FaceNet人脸特征提取模型，可在大多数CPU上高效运行。"
+        },
+        "large": {
+          "title": "大",
+          "desc": "将使用<strong>大</strong>模型。该选项使用ArcFace人脸特征提取模型，在需要的时候自动使用GPU运行。"
+        }
+      }
+    },
+    "toast": {
+      "success": "增强功能设置已保存。请重启 Frigate 以应用更改。",
+      "error": "配置更改保存失败：{{errorMessage}}"
+    },
+    "unsavedChanges": "增强功能设置未保存",
+    "restart_required": "需要重启（增强功能设置已保存）"
+  },
+  "triggers": {
+    "documentTitle": "触发器",
+    "management": {
+      "title": "触发器管理",
+      "desc": "管理 {{camera}} 的触发器。您可以使用“缩略图”类型，基于与所选追踪对象相似的缩略图来触发；也可以使用“描述”类型，基于与您指定的文本相似的描述来触发。"
+    },
+    "addTrigger": "添加触发器",
+    "table": {
+      "name": "名称",
+      "type": "类型",
+      "content": "触发内容",
+      "threshold": "阈值",
+      "actions": "动作",
+      "noTriggers": "此摄像头未配置任何触发器。",
+      "edit": "编辑",
+      "deleteTrigger": "删除触发器",
+      "lastTriggered": "最后一个触发项"
+    },
+    "type": {
+      "thumbnail": "缩略图",
+      "description": "描述"
+    },
+    "actions": {
+      "alert": "标记为警报",
+      "notification": "发送通知"
+    },
+    "dialog": {
+      "createTrigger": {
+        "title": "创建触发器",
+        "desc": "为摄像头 {{camera}} 创建触发器"
+      },
+      "editTrigger": {
+        "title": "编辑触发器",
+        "desc": "编辑摄像头 {{camera}} 的触发器设置"
+      },
+      "deleteTrigger": {
+        "title": "删除触发器",
+        "desc": "你确定要删除触发器 <strong>{{triggerName}}</strong> 吗？此操作不可撤销。"
+      },
+      "form": {
+        "name": {
+          "title": "名称",
+          "placeholder": "输入触发器名称",
+          "error": {
+            "minLength": "名称至少要两个字符。",
+            "invalidCharacters": "名称只能包含字母、数字、下划线和连字符。",
+            "alreadyExists": "此摄像头已存在同名触发器。"
+          }
+        },
+        "enabled": {
+          "description": "开启/关闭此触发器"
+        },
+        "type": {
+          "title": "类型",
+          "placeholder": "选择触发类型"
+        },
+        "content": {
+          "title": "内容",
+          "imagePlaceholder": "选择图片",
+          "textPlaceholder": "输入文字内容",
+          "imageDesc": "选择一张图片，当检测到相似图片时触发此操作。",
+          "textDesc": "输入文本，当检测到相似的追踪对象描述时触发此操作。",
+          "error": {
+            "required": "内容为必填项。"
+          }
+        },
+        "threshold": {
+          "title": "阈值",
+          "error": {
+            "min": "阈值必须大于 0",
+            "max": "阈值必须小于 1"
+          }
+        },
+        "actions": {
+          "title": "动作",
+          "desc": "默认情况下，Frigate 会为所有触发器发送 MQTT 消息。请选择此触发器触发时需要执行的附加操作。",
+          "error": {
+            "min": "必须至少选择一项动作。"
+          }
+        }
+      }
+    },
+    "toast": {
+      "success": {
+        "createTrigger": "触发器 {{name}} 创建成功。",
+        "updateTrigger": "触发器 {{name}} 更新成功。",
+        "deleteTrigger": "触发器 {{name}} 已删除。"
+      },
+      "error": {
+        "createTriggerFailed": "创建触发器失败：{{errorMessage}}",
+        "updateTriggerFailed": "更新触发器失败：{{errorMessage}}",
+        "deleteTriggerFailed": "删除触发器失败：{{errorMessage}}"
+      }
     }
   }
 }

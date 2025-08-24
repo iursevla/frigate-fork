@@ -2,12 +2,15 @@
 
 import base64
 import datetime
+import json
 import logging
 import math
+import os
 import random
 import re
 import string
-from typing import List, Optional, Tuple
+from pathlib import Path
+from typing import Any, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -19,8 +22,10 @@ from frigate.comms.event_metadata_updater import (
     EventMetadataPublisher,
     EventMetadataTypeEnum,
 )
-from frigate.config.camera.camera import CameraTypeEnum
+from frigate.const import CLIPS_DIR, MODEL_CACHE_DIR
 from frigate.embeddings.onnx.lpr_embedding import LPR_EMBEDDING_SIZE
+from frigate.types import TrackedObjectUpdateTypesEnum
+from frigate.util.builtin import EventsPerSecond, InferenceSpeed
 from frigate.util.image import area
 
 logger = logging.getLogger(__name__)
@@ -31,15 +36,18 @@ WRITE_DEBUG_IMAGES = False
 class LicensePlateProcessingMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        self.requires_license_plate_detection = (
-            "license_plate" not in self.config.objects.all_objects
-        )
-
+        self.plate_rec_speed = InferenceSpeed(self.metrics.alpr_speed)
+        self.plates_rec_second = EventsPerSecond()
+        self.plates_rec_second.start()
+        self.plate_det_speed = InferenceSpeed(self.metrics.yolov9_lpr_speed)
+        self.plates_det_second = EventsPerSecond()
+        self.plates_det_second.start()
         self.event_metadata_publisher = EventMetadataPublisher()
-
-        self.ctc_decoder = CTCDecoder()
-
+        self.ctc_decoder = CTCDecoder(
+            character_dict_path=os.path.join(
+                MODEL_CACHE_DIR, "paddleocr-onnx", "ppocr_keys_v1.txt"
+            )
+        )
         self.batch_size = 6
 
         # Detection specific parameters
@@ -53,7 +61,7 @@ class LicensePlateProcessingMixin:
 
     def _detect(self, image: np.ndarray) -> List[np.ndarray]:
         """
-        Detect possible license plates in the input image by first resizing and normalizing it,
+        Detect possible areas of text in the input image by first resizing and normalizing it,
         running a detection model, and filtering out low-probability regions.
 
         Args:
@@ -77,8 +85,20 @@ class LicensePlateProcessingMixin:
                 resized_image,
             )
 
-        outputs = self.model_runner.detection_model([normalized_image])[0]
+        try:
+            outputs = self.model_runner.detection_model([normalized_image])[0]
+        except Exception as e:
+            logger.warning(f"Error running LPR box detection model: {e}")
+            return []
+
         outputs = outputs[0, :, :]
+
+        if False:
+            current_time = int(datetime.datetime.now().timestamp())
+            cv2.imwrite(
+                f"debug/frames/probability_map_{current_time}.jpg",
+                (outputs * 255).astype(np.uint8),
+            )
 
         boxes, _ = self._boxes_from_bitmap(outputs, outputs > self.mask_thresh, w, h)
         return self._filter_polygon(boxes, (h, w))
@@ -106,12 +126,16 @@ class LicensePlateProcessingMixin:
                 norm_img = norm_img[np.newaxis, :]
                 norm_images.append(norm_img)
 
-        outputs = self.model_runner.classification_model(norm_images)
+        try:
+            outputs = self.model_runner.classification_model(norm_images)
+        except Exception as e:
+            logger.warning(f"Error running LPR classification model: {e}")
+            return
 
         return self._process_classification_output(images, outputs)
 
     def _recognize(
-        self, images: List[np.ndarray]
+        self, camera: string, images: List[np.ndarray]
     ) -> Tuple[List[str], List[List[float]]]:
         """
         Recognize the characters on the detected license plates using the recognition model.
@@ -125,9 +149,6 @@ class LicensePlateProcessingMixin:
         input_shape = [3, 48, 320]
         num_images = len(images)
 
-        # sort images by aspect ratio for processing
-        indices = np.argsort(np.array([x.shape[1] / x.shape[0] for x in images]))
-
         for index in range(0, num_images, self.batch_size):
             input_h, input_w = input_shape[1], input_shape[2]
             max_wh_ratio = input_w / input_h
@@ -135,31 +156,40 @@ class LicensePlateProcessingMixin:
 
             # calculate the maximum aspect ratio in the current batch
             for i in range(index, min(num_images, index + self.batch_size)):
-                h, w = images[indices[i]].shape[0:2]
+                h, w = images[i].shape[0:2]
                 max_wh_ratio = max(max_wh_ratio, w * 1.0 / h)
 
             # preprocess the images based on the max aspect ratio
             for i in range(index, min(num_images, index + self.batch_size)):
                 norm_image = self._preprocess_recognition_image(
-                    images[indices[i]], max_wh_ratio
+                    camera, images[i], max_wh_ratio
                 )
                 norm_image = norm_image[np.newaxis, :]
                 norm_images.append(norm_image)
 
-        outputs = self.model_runner.recognition_model(norm_images)
+        try:
+            outputs = self.model_runner.recognition_model(norm_images)
+        except Exception as e:
+            logger.warning(f"Error running LPR recognition model: {e}")
+            return [], []
+
         return self.ctc_decoder(outputs)
 
     def _process_license_plate(
-        self, image: np.ndarray
-    ) -> Tuple[List[str], List[float], List[int]]:
+        self, camera: str, id: str, image: np.ndarray
+    ) -> Tuple[List[str], List[List[float]], List[int]]:
         """
         Complete pipeline for detecting, classifying, and recognizing license plates in the input image.
+        Combines multi-line plates into a single plate string, grouping boxes by vertical alignment and ordering top to bottom,
+        but only combines boxes if their average confidence scores meet the threshold and their heights are similar.
 
         Args:
+            camera (str): Camera identifier.
+            id (str): Event identifier.
             image (np.ndarray): The input image in which to detect, classify, and recognize license plates.
 
         Returns:
-            Tuple[List[str], List[float], List[int]]: Detected license plate texts, confidence scores, and areas of the plates.
+            Tuple[List[str], List[List[float]], List[int]]: Detected license plate texts, character-level confidence scores for each plate (flattened into a single list per plate), and areas of the plates.
         """
         if (
             self.model_runner.detection_model.runner is None
@@ -175,53 +205,173 @@ class LicensePlateProcessingMixin:
             logger.debug("No boxes found by OCR detector model")
             return [], [], []
 
-        boxes = self._sort_boxes(list(boxes))
-        plate_images = [self._crop_license_plate(image, x) for x in boxes]
+        if len(boxes) > 0:
+            plate_left = np.min([np.min(box[:, 0]) for box in boxes])
+            plate_right = np.max([np.max(box[:, 0]) for box in boxes])
+            plate_width = plate_right - plate_left
+        else:
+            plate_width = 0
 
+        boxes = self._merge_nearby_boxes(
+            boxes, plate_width=plate_width, gap_fraction=0.1
+        )
+
+        current_time = int(datetime.datetime.now().timestamp())
         if WRITE_DEBUG_IMAGES:
-            current_time = int(datetime.datetime.now().timestamp())
-            for i, img in enumerate(plate_images):
-                cv2.imwrite(
-                    f"debug/frames/license_plate_cropped_{current_time}_{i + 1}.jpg",
-                    img,
+            debug_image = image.copy()
+            for box in boxes:
+                box = box.astype(int)
+                x_min, y_min = np.min(box[:, 0]), np.min(box[:, 1])
+                x_max, y_max = np.max(box[:, 0]), np.max(box[:, 1])
+                cv2.rectangle(
+                    debug_image,
+                    (x_min, y_min),
+                    (x_max, y_max),
+                    color=(0, 255, 0),
+                    thickness=2,
                 )
 
-        # keep track of the index of each image for correct area calc later
-        sorted_indices = np.argsort([x.shape[1] / x.shape[0] for x in plate_images])
-        reverse_mapping = {
-            idx: original_idx for original_idx, idx in enumerate(sorted_indices)
-        }
+            cv2.imwrite(
+                f"debug/frames/license_plate_boxes_{current_time}.jpg", debug_image
+            )
 
-        results, confidences = self._recognize(plate_images)
+        boxes = self._sort_boxes(list(boxes))
 
-        if results:
-            license_plates = [""] * len(plate_images)
-            average_confidences = [[0.0]] * len(plate_images)
-            areas = [0] * len(plate_images)
+        # Step 1: Compute box heights and group boxes by vertical alignment and height similarity
+        box_info = []
+        for i, box in enumerate(boxes):
+            y_coords = box[:, 1]
+            y_min, y_max = np.min(y_coords), np.max(y_coords)
+            height = y_max - y_min
+            box_info.append((y_min, y_max, height, i))
 
-            # map results back to original image order
-            for i, (plate, conf) in enumerate(zip(results, confidences)):
-                original_idx = reverse_mapping[i]
+        # Initial grouping based on y-coordinate overlap and height similarity
+        initial_groups = []
+        current_group = [box_info[0]]
+        height_tolerance = 0.25  # Allow 25% difference in height for grouping
 
-                height, width = plate_images[original_idx].shape[:2]
-                area = height * width
+        for i in range(1, len(box_info)):
+            prev_y_min, prev_y_max, prev_height, _ = current_group[-1]
+            curr_y_min, _, curr_height, _ = box_info[i]
 
-                average_confidence = conf
+            # Check y-coordinate overlap
+            overlap_threshold = 0.1 * (prev_y_max - prev_y_min)
+            overlaps = curr_y_min <= prev_y_max + overlap_threshold
 
-                # set to True to write each cropped image for debugging
-                if False:
-                    filename = f"debug/frames/plate_{original_idx}_{plate}_{area}.jpg"
-                    cv2.imwrite(filename, plate_images[original_idx])
+            # Check height similarity
+            height_ratio = min(prev_height, curr_height) / max(prev_height, curr_height)
+            height_similar = height_ratio >= (1 - height_tolerance)
 
-                license_plates[original_idx] = plate
-                average_confidences[original_idx] = average_confidence
-                areas[original_idx] = area
+            if overlaps and height_similar:
+                current_group.append(box_info[i])
+            else:
+                initial_groups.append(current_group)
+                current_group = [box_info[i]]
+        initial_groups.append(current_group)
 
-            # Filter out plates that have a length of less than min_plate_length characters
-            # or that don't match the expected format (if defined)
-            # Sort by area, then by plate length, then by confidence all desc
+        # Step 2: Process each initial group, filter by confidence
+        all_license_plates = []
+        all_confidences = []
+        all_areas = []
+        processed_indices = set()
+
+        recognition_threshold = self.lpr_config.recognition_threshold
+
+        for group in initial_groups:
+            # Sort group by y-coordinate (top to bottom)
+            group.sort(key=lambda x: x[0])
+            group_indices = [item[3] for item in group]
+
+            # Skip if all indices in this group have already been processed
+            if all(idx in processed_indices for idx in group_indices):
+                continue
+
+            # Crop images for the group
+            group_boxes = [boxes[i] for i in group_indices]
+            group_plate_images = [
+                self._crop_license_plate(image, box) for box in group_boxes
+            ]
+
+            if WRITE_DEBUG_IMAGES:
+                for i, img in enumerate(group_plate_images):
+                    cv2.imwrite(
+                        f"debug/frames/license_plate_cropped_{current_time}_{group_indices[i] + 1}.jpg",
+                        img,
+                    )
+
+            if self.config.lpr.debug_save_plates:
+                logger.debug(f"{camera}: Saving plates for event {id}")
+                Path(os.path.join(CLIPS_DIR, f"lpr/{camera}/{id}")).mkdir(
+                    parents=True, exist_ok=True
+                )
+                for i, img in enumerate(group_plate_images):
+                    cv2.imwrite(
+                        os.path.join(
+                            CLIPS_DIR,
+                            f"lpr/{camera}/{id}/{current_time}_{group_indices[i] + 1}.jpg",
+                        ),
+                        img,
+                    )
+
+            # Recognize text in each cropped image
+            results, confidences = self._recognize(camera, group_plate_images)
+
+            if not results:
+                continue
+
+            if not confidences:
+                confidences = [[0.0] for _ in results]
+
+            # Compute average confidence for each box's recognized text
+            avg_confidences = []
+            for conf_list in confidences:
+                avg_conf = sum(conf_list) / len(conf_list) if conf_list else 0.0
+                avg_confidences.append(avg_conf)
+
+            # Filter boxes based on the recognition threshold
+            qualifying_indices = []
+            qualifying_results = []
+            qualifying_confidences = []
+            for i, (avg_conf, result, conf_list) in enumerate(
+                zip(avg_confidences, results, confidences)
+            ):
+                if avg_conf >= recognition_threshold:
+                    qualifying_indices.append(group_indices[i])
+                    qualifying_results.append(result)
+                    qualifying_confidences.append(conf_list)
+
+            if not qualifying_results:
+                continue
+
+            processed_indices.update(qualifying_indices)
+
+            # Combine the qualifying results into a single plate string
+            combined_plate = " ".join(qualifying_results)
+
+            flat_confidences = [
+                conf for conf_list in qualifying_confidences for conf in conf_list
+            ]
+
+            # Compute the combined area for qualifying boxes
+            qualifying_boxes = [boxes[i] for i in qualifying_indices]
+            qualifying_plate_images = [
+                self._crop_license_plate(image, box) for box in qualifying_boxes
+            ]
+            group_areas = [
+                img.shape[0] * img.shape[1] for img in qualifying_plate_images
+            ]
+            combined_area = sum(group_areas)
+
+            all_license_plates.append(combined_plate)
+            all_confidences.append(flat_confidences)
+            all_areas.append(combined_area)
+
+        # Step 3: Filter and sort the combined plates
+        if all_license_plates:
             filtered_data = []
-            for plate, conf, area in zip(license_plates, average_confidences, areas):
+            for plate, conf_list, area in zip(
+                all_license_plates, all_confidences, all_areas
+            ):
                 if len(plate) < self.lpr_config.min_plate_length:
                     logger.debug(
                         f"Filtered out '{plate}' due to length ({len(plate)} < {self.lpr_config.min_plate_length})"
@@ -234,11 +384,11 @@ class LicensePlateProcessingMixin:
                     logger.debug(f"Filtered out '{plate}' due to format mismatch")
                     continue
 
-                filtered_data.append((plate, conf, area))
+                filtered_data.append((plate, conf_list, area))
 
             sorted_data = sorted(
                 filtered_data,
-                key=lambda x: (x[2], len(x[0]), x[1]),
+                key=lambda x: (x[2], len(x[0]), sum(x[1]) / len(x[1]) if x[1] else 0),
                 reverse=True,
             )
 
@@ -281,6 +431,92 @@ class LicensePlateProcessingMixin:
         cv2.multiply(image, std, image)
         return image.transpose((2, 0, 1))[np.newaxis, ...]
 
+    def _merge_nearby_boxes(
+        self,
+        boxes: List[np.ndarray],
+        plate_width: float,
+        gap_fraction: float = 0.1,
+        min_overlap_fraction: float = -0.2,
+    ) -> List[np.ndarray]:
+        """
+        Merge bounding boxes that are likely part of the same license plate based on proximity,
+        with a dynamic max_gap based on the provided width of the entire license plate.
+
+        Args:
+            boxes (List[np.ndarray]): List of bounding boxes with shape (n, 4, 2), where n is the number of boxes,
+                                    each box has 4 corners, and each corner has (x, y) coordinates.
+            plate_width (float): The width of the entire license plate in pixels, used to calculate max_gap.
+            gap_fraction (float): Fraction of the plate width to use as the maximum gap.
+                                Default is 0.1 (10% of the plate width).
+
+        Returns:
+            List[np.ndarray]: List of merged bounding boxes.
+        """
+        if len(boxes) == 0:
+            return []
+
+        max_gap = plate_width * gap_fraction
+        min_overlap = plate_width * min_overlap_fraction
+
+        # Sort boxes by top left x
+        sorted_boxes = sorted(boxes, key=lambda x: x[0][0])
+
+        merged_boxes = []
+        current_box = sorted_boxes[0]
+
+        for i in range(1, len(sorted_boxes)):
+            next_box = sorted_boxes[i]
+
+            # Calculate the horizontal gap between the current box and the next box
+            current_right = np.max(
+                current_box[:, 0]
+            )  # Rightmost x-coordinate of current box
+            next_left = np.min(next_box[:, 0])  # Leftmost x-coordinate of next box
+            horizontal_gap = next_left - current_right
+
+            # Check if the boxes are vertically aligned (similar y-coordinates)
+            current_top = np.min(current_box[:, 1])
+            current_bottom = np.max(current_box[:, 1])
+            next_top = np.min(next_box[:, 1])
+            next_bottom = np.max(next_box[:, 1])
+
+            # Consider boxes part of the same plate if they are close horizontally or overlap
+            # within the allowed limit and their vertical positions overlap significantly
+            if min_overlap <= horizontal_gap <= max_gap and max(
+                current_top, next_top
+            ) <= min(current_bottom, next_bottom):
+                merged_points = np.vstack((current_box, next_box))
+                new_box = np.array(
+                    [
+                        [
+                            np.min(merged_points[:, 0]),
+                            np.min(merged_points[:, 1]),
+                        ],
+                        [
+                            np.max(merged_points[:, 0]),
+                            np.min(merged_points[:, 1]),
+                        ],
+                        [
+                            np.max(merged_points[:, 0]),
+                            np.max(merged_points[:, 1]),
+                        ],
+                        [
+                            np.min(merged_points[:, 0]),
+                            np.max(merged_points[:, 1]),
+                        ],
+                    ]
+                )
+                current_box = new_box
+            else:
+                # If the boxes are not close enough or overlap too much, add the current box to the result
+                merged_boxes.append(current_box)
+                current_box = next_box
+
+        # Add the last box
+        merged_boxes.append(current_box)
+
+        return np.array(merged_boxes, dtype=np.int32)
+
     def _boxes_from_bitmap(
         self, output: np.ndarray, mask: np.ndarray, dest_width: int, dest_height: int
     ) -> Tuple[np.ndarray, List[float]]:
@@ -311,42 +547,34 @@ class LicensePlateProcessingMixin:
             contour = contours[index]
 
             # get minimum bounding box (rotated rectangle) around the contour and the smallest side length.
-            points, min_side = self._get_min_boxes(contour)
-            logger.debug(f"min side {index}, {min_side}")
-
-            if min_side < self.min_size:
+            points, sside = self._get_min_boxes(contour)
+            if sside < self.min_size:
                 continue
 
-            points = np.array(points)
+            points = np.array(points, dtype=np.float32)
 
             score = self._box_score(output, contour)
-            logger.debug(f"box score {index}, {score}")
             if self.box_thresh > score:
                 continue
 
-            polygon = Polygon(points)
-            distance = polygon.area / polygon.length
+            points = self._expand_box(points)
 
-            # Use pyclipper to shrink the polygon slightly based on the computed distance.
-            offset = PyclipperOffset()
-            offset.AddPath(points, JT_ROUND, ET_CLOSEDPOLYGON)
-            points = np.array(offset.Execute(distance * 1.5)).reshape((-1, 1, 2))
-
-            # get the minimum bounding box around the shrunken polygon.
-            box, min_side = self._get_min_boxes(points)
-
-            if min_side < self.min_size + 2:
+            # Get the minimum area rectangle again after expansion
+            points, sside = self._get_min_boxes(points.reshape(-1, 1, 2))
+            if sside < self.min_size + 2:
                 continue
 
-            box = np.array(box)
+            points = np.array(points, dtype=np.float32)
 
             # normalize and clip box coordinates to fit within the destination image size.
-            box[:, 0] = np.clip(np.round(box[:, 0] / width * dest_width), 0, dest_width)
-            box[:, 1] = np.clip(
-                np.round(box[:, 1] / height * dest_height), 0, dest_height
+            points[:, 0] = np.clip(
+                np.round(points[:, 0] / width * dest_width), 0, dest_width
+            )
+            points[:, 1] = np.clip(
+                np.round(points[:, 1] / height * dest_height), 0, dest_height
             )
 
-            boxes.append(box.astype("int32"))
+            boxes.append(points.astype("int32"))
             scores.append(score)
 
         return np.array(boxes, dtype="int32"), scores
@@ -612,7 +840,7 @@ class LicensePlateProcessingMixin:
         return images, results
 
     def _preprocess_recognition_image(
-        self, image: np.ndarray, max_wh_ratio: float
+        self, camera: string, image: np.ndarray, max_wh_ratio: float
     ) -> np.ndarray:
         """
         Preprocess an image for recognition by dynamically adjusting its width.
@@ -640,37 +868,38 @@ class LicensePlateProcessingMixin:
         else:
             gray = image
 
-        # detect noise with Laplacian variance
-        laplacian = cv2.Laplacian(gray, cv2.CV_64F)
-        noise_variance = np.var(laplacian)
-        brightness = cv2.mean(gray)[0]
-        noise_threshold = 70
-        brightness_threshold = 150
-        is_noisy = (
-            noise_variance > noise_threshold and brightness < brightness_threshold
-        )
-
-        # apply bilateral filter and sharpening only if noisy
-        if is_noisy:
+        if self.config.cameras[camera].lpr.enhancement > 3:
+            # denoise using a configurable pixel neighborhood value
             logger.debug(
-                f"Noise detected (variance: {noise_variance:.1f}, brightness: {brightness:.1f}) - denoising"
+                f"{camera}: Denoising recognition image (level: {self.config.cameras[camera].lpr.enhancement})"
             )
-            smoothed = cv2.bilateralFilter(gray, d=15, sigmaColor=100, sigmaSpace=100)
+            smoothed = cv2.bilateralFilter(
+                gray,
+                d=5 + self.config.cameras[camera].lpr.enhancement,
+                sigmaColor=10 * self.config.cameras[camera].lpr.enhancement,
+                sigmaSpace=10 * self.config.cameras[camera].lpr.enhancement,
+            )
             sharpening_kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
             processed = cv2.filter2D(smoothed, -1, sharpening_kernel)
         else:
-            logger.debug(
-                f"No noise detected (variance: {noise_variance:.1f}, brightness: {brightness:.1f}) - skipping denoising and sharpening"
-            )
             processed = gray
 
-        # apply CLAHE for contrast enhancement
-        grid_size = (
-            max(4, input_w // 40),
-            max(4, input_h // 40),
-        )
-        clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=grid_size)
-        enhanced = clahe.apply(processed)
+        if self.config.cameras[camera].lpr.enhancement > 0:
+            # always apply the same CLAHE for contrast enhancement when enhancement level is above 3
+            logger.debug(
+                f"{camera}: Enhancing contrast for recognition image (level: {self.config.cameras[camera].lpr.enhancement})"
+            )
+            grid_size = (
+                max(4, input_w // 40),
+                max(4, input_h // 40),
+            )
+            clahe = cv2.createCLAHE(
+                clipLimit=2 if self.config.cameras[camera].lpr.enhancement > 5 else 1.5,
+                tileGridSize=grid_size,
+            )
+            enhanced = clahe.apply(processed)
+        else:
+            enhanced = processed
 
         # Convert back to 3-channel for model compatibility
         image = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2RGB)
@@ -679,9 +908,7 @@ class LicensePlateProcessingMixin:
         input_w = int(input_h * max_wh_ratio)
 
         # check for model-specific input width
-        model_input_w = self.model_runner.recognition_model.runner.ort.get_inputs()[
-            0
-        ].shape[3]
+        model_input_w = self.model_runner.recognition_model.runner.get_input_width()
         if isinstance(model_input_w, int) and model_input_w > 0:
             input_w = model_input_w
 
@@ -761,7 +988,11 @@ class LicensePlateProcessingMixin:
 
         Return the dimensions of the detected plate as [x1, y1, x2, y2].
         """
-        predictions = self.model_runner.yolov9_detection_model(input)
+        try:
+            predictions = self.model_runner.yolov9_detection_model(input)
+        except Exception as e:
+            logger.warning(f"Error running YOLOv9 license plate detection model: {e}")
+            return None
 
         confidence_threshold = self.lpr_config.detection_threshold
 
@@ -820,7 +1051,9 @@ class LicensePlateProcessingMixin:
                 ]
             ).clip(0, [input.shape[1], input.shape[0]] * 2)
 
-            logger.debug(f"Found license plate: {expanded_box.astype(int)}")
+            logger.debug(
+                f"Found license plate. Bounding box: {expanded_box.astype(int)}"
+            )
             return tuple(expanded_box.astype(int))
         else:
             return None  # No detection above the threshold
@@ -853,16 +1086,21 @@ class LicensePlateProcessingMixin:
 
         # Adjust length score based on confidence of extra characters
         conf_threshold = 0.75  # Minimum confidence for a character to be "trusted"
-        if len(top_plate) > len(prev_plate):
-            extra_conf = min(
-                top_char_confidences[len(prev_plate) :]
-            )  # Lowest extra char confidence
-            if extra_conf < conf_threshold:
-                curr_length_score *= extra_conf / conf_threshold  # Penalize if weak
-        elif len(prev_plate) > len(top_plate):
-            extra_conf = min(prev_char_confidences[len(top_plate) :])
-            if extra_conf < conf_threshold:
-                prev_length_score *= extra_conf / conf_threshold
+        top_plate_char_count = len(top_plate.replace(" ", ""))
+        prev_plate_char_count = len(prev_plate.replace(" ", ""))
+
+        if top_plate_char_count > prev_plate_char_count:
+            extra_confidences = top_char_confidences[prev_plate_char_count:]
+            if extra_confidences:  # Ensure the slice is not empty
+                extra_conf = min(extra_confidences)  # Lowest extra char confidence
+                if extra_conf < conf_threshold:
+                    curr_length_score *= extra_conf / conf_threshold  # Penalize if weak
+        elif prev_plate_char_count > top_plate_char_count:
+            extra_confidences = prev_char_confidences[top_plate_char_count:]
+            if extra_confidences:  # Ensure the slice is not empty
+                extra_conf = min(extra_confidences)
+                if extra_conf < conf_threshold:
+                    prev_length_score *= extra_conf / conf_threshold
 
         # Area score: Normalize by max area
         max_area = max(top_area, prev_area)
@@ -917,7 +1155,7 @@ class LicensePlateProcessingMixin:
         # 4. Log the comparison
         logger.debug(
             f"Plate comparison - Current: {top_plate} (score: {curr_score:.3f}, min_conf: {curr_min_conf:.2f}) vs "
-            f"Previous: {prev_plate} (score: {prev_score:.3f}, min_conf: {prev_min_conf:.2f})\n"
+            f"Previous: {prev_plate} (score: {prev_score:.3f}, min_conf: {prev_min_conf:.2f}) "
             f"Metrics - Length: {len(top_plate)} vs {len(prev_plate)} (scores: {curr_length_score:.2f} vs {prev_length_score:.2f}), "
             f"Area: {top_area} vs {prev_area}, "
             f"Avg Conf: {avg_confidence:.2f} vs {prev_avg_confidence:.2f}, "
@@ -927,20 +1165,6 @@ class LicensePlateProcessingMixin:
         # 5. Return True if previous plate scores higher
         return prev_score > curr_score
 
-    def __update_yolov9_metrics(self, duration: float) -> None:
-        """
-        Update inference metrics.
-        """
-        self.metrics.yolov9_lpr_fps.value = (
-            self.metrics.yolov9_lpr_fps.value * 9 + duration
-        ) / 10
-
-    def __update_lpr_metrics(self, duration: float) -> None:
-        """
-        Update inference metrics.
-        """
-        self.metrics.alpr_pps.value = (self.metrics.alpr_pps.value * 9 + duration) / 10
-
     def _generate_plate_event(self, camera: str, plate: str, plate_score: float) -> str:
         """Generate a unique ID for a plate event based on camera and text."""
         now = datetime.datetime.now().timestamp()
@@ -948,34 +1172,36 @@ class LicensePlateProcessingMixin:
         event_id = f"{now}-{rand_id}"
 
         self.event_metadata_publisher.publish(
-            EventMetadataTypeEnum.lpr_event_create,
             (
                 now,
                 camera,
-                "car",
+                "license_plate",
                 event_id,
                 True,
                 plate_score,
                 None,
                 plate,
             ),
+            EventMetadataTypeEnum.lpr_event_create.value,
         )
         return event_id
 
     def lpr_process(
-        self, obj_data: dict[str, any], frame: np.ndarray, dedicated_lpr: bool = False
+        self, obj_data: dict[str, Any], frame: np.ndarray, dedicated_lpr: bool = False
     ):
         """Look for license plates in image."""
+        self.metrics.alpr_pps.value = self.plates_rec_second.eps()
+        self.metrics.yolov9_lpr_pps.value = self.plates_det_second.eps()
         camera = obj_data if dedicated_lpr else obj_data["camera"]
         current_time = int(datetime.datetime.now().timestamp())
 
         if not self.config.cameras[camera].lpr.enabled:
             return
 
-        if not dedicated_lpr and self.config.cameras[camera].type == CameraTypeEnum.lpr:
-            return
-
+        # dedicated LPR cam without frigate+
         if dedicated_lpr:
+            id = "dedicated-lpr"
+
             rgb = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_I420)
 
             # apply motion mask
@@ -991,21 +1217,22 @@ class LicensePlateProcessingMixin:
             license_plate = self._detect_license_plate(rgb)
 
             logger.debug(
-                f"YOLOv9 LPD inference time: {(datetime.datetime.now().timestamp() - yolov9_start) * 1000:.2f} ms"
+                f"{camera}: YOLOv9 LPD inference time: {(datetime.datetime.now().timestamp() - yolov9_start) * 1000:.2f} ms"
             )
-            self.__update_yolov9_metrics(
+            self.plates_det_second.update()
+            self.plate_det_speed.update(
                 datetime.datetime.now().timestamp() - yolov9_start
             )
 
             if not license_plate:
-                logger.debug("Detected no license plates in full frame.")
+                logger.debug(f"{camera}: Detected no license plates in full frame.")
                 return
 
             license_plate_area = (license_plate[2] - license_plate[0]) * (
                 license_plate[3] - license_plate[1]
             )
-            if license_plate_area < self.lpr_config.min_area:
-                logger.debug("License plate area below minimum threshold.")
+            if license_plate_area < self.config.cameras[camera].lpr.min_area:
+                logger.debug(f"{camera}: License plate area below minimum threshold.")
                 return
 
             license_plate_frame = rgb[
@@ -1025,30 +1252,36 @@ class LicensePlateProcessingMixin:
         else:
             id = obj_data["id"]
 
-            # don't run for non car objects
-            if obj_data.get("label") != "car":
-                logger.debug("Not a processing license plate for non car object.")
+            # don't run for non car/motorcycle or non license plate (dedicated lpr with frigate+) objects
+            if (
+                obj_data.get("label") not in ["car", "motorcycle"]
+                and obj_data.get("label") != "license_plate"
+            ):
+                logger.debug(
+                    f"{camera}: Not a processing license plate for non car/motorcycle object."
+                )
                 return
 
             # don't run for stationary car objects
             if obj_data.get("stationary") == True:
                 logger.debug(
-                    "Not a processing license plate for a stationary car object."
+                    f"{camera}: Not a processing license plate for a stationary car/motorcycle object."
                 )
                 return
 
-            # don't overwrite sub label for objects that have a sub label
-            # that is not a license plate
-            if obj_data.get("sub_label") and id not in self.detected_license_plates:
+            # don't run for objects with no position changes
+            # this is the initial state after registering a new tracked object
+            # LPR will run 2 frames after detect.min_initialized is reached
+            if obj_data.get("position_changes", 0) == 0:
                 logger.debug(
-                    f"Not processing license plate due to existing sub label: {obj_data.get('sub_label')}."
+                    f"{camera}: Plate detected in {self.config.cameras[camera].detect.min_initialized + 1} concurrent frames, LPR frame threshold ({self.config.cameras[camera].detect.min_initialized + 2})"
                 )
                 return
 
-            license_plate: Optional[dict[str, any]] = None
+            license_plate: Optional[dict[str, Any]] = None
 
-            if self.requires_license_plate_detection:
-                logger.debug("Running manual license_plate detection.")
+            if "license_plate" not in self.config.cameras[camera].objects.track:
+                logger.debug(f"{camera}: Running manual license_plate detection.")
 
                 car_box = obj_data.get("box")
 
@@ -1056,6 +1289,10 @@ class LicensePlateProcessingMixin:
                     return
 
                 rgb = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_I420)
+
+                # apply motion mask
+                rgb[self.config.cameras[camera].motion.mask == 0] = [0, 0, 0]
+
                 left, top, right, bottom = car_box
                 car = rgb[top:bottom, left:right]
 
@@ -1071,14 +1308,17 @@ class LicensePlateProcessingMixin:
                 yolov9_start = datetime.datetime.now().timestamp()
                 license_plate = self._detect_license_plate(car)
                 logger.debug(
-                    f"YOLOv9 LPD inference time: {(datetime.datetime.now().timestamp() - yolov9_start) * 1000:.2f} ms"
+                    f"{camera}: YOLOv9 LPD inference time: {(datetime.datetime.now().timestamp() - yolov9_start) * 1000:.2f} ms"
                 )
-                self.__update_yolov9_metrics(
+                self.plates_det_second.update()
+                self.plate_det_speed.update(
                     datetime.datetime.now().timestamp() - yolov9_start
                 )
 
                 if not license_plate:
-                    logger.debug("Detected no license plates for car object.")
+                    logger.debug(
+                        f"{camera}: Detected no license plates for car/motorcycle object."
+                    )
                     return
 
                 license_plate_area = max(
@@ -1089,11 +1329,8 @@ class LicensePlateProcessingMixin:
 
                 # check that license plate is valid
                 # double the value because we've doubled the size of the car
-                if (
-                    license_plate_area
-                    < self.config.cameras[obj_data["camera"]].lpr.min_area * 2
-                ):
-                    logger.debug("License plate is less than min_area")
+                if license_plate_area < self.config.cameras[camera].lpr.min_area * 2:
+                    logger.debug(f"{camera}: License plate is less than min_area")
                     return
 
                 license_plate_frame = car[
@@ -1101,26 +1338,34 @@ class LicensePlateProcessingMixin:
                     license_plate[0] : license_plate[2],
                 ]
             else:
-                # don't run for object without attributes
-                if not obj_data.get("current_attributes"):
-                    logger.debug("No attributes to parse.")
+                # don't run for object without attributes if this isn't dedicated lpr with frigate+
+                if (
+                    not obj_data.get("current_attributes")
+                    and obj_data.get("label") != "license_plate"
+                ):
+                    logger.debug(f"{camera}: No attributes to parse.")
                     return
 
-                attributes: list[dict[str, any]] = obj_data.get(
-                    "current_attributes", []
-                )
-                for attr in attributes:
-                    if attr.get("label") != "license_plate":
-                        continue
+                if obj_data.get("label") in ["car", "motorcycle"]:
+                    attributes: list[dict[str, Any]] = obj_data.get(
+                        "current_attributes", []
+                    )
+                    for attr in attributes:
+                        if attr.get("label") != "license_plate":
+                            continue
 
-                    if license_plate is None or attr.get(
-                        "score", 0.0
-                    ) > license_plate.get("score", 0.0):
-                        license_plate = attr
+                        if license_plate is None or attr.get(
+                            "score", 0.0
+                        ) > license_plate.get("score", 0.0):
+                            license_plate = attr
 
-                # no license plates detected in this frame
-                if not license_plate:
-                    return
+                    # no license plates detected in this frame
+                    if not license_plate:
+                        return
+
+                # we are using dedicated lpr with frigate+
+                if obj_data.get("label") == "license_plate":
+                    license_plate = obj_data
 
                 license_plate_box = license_plate.get("box")
 
@@ -1128,16 +1373,18 @@ class LicensePlateProcessingMixin:
                 if (
                     not license_plate_box
                     or area(license_plate_box)
-                    < self.config.cameras[obj_data["camera"]].lpr.min_area
+                    < self.config.cameras[camera].lpr.min_area
                 ):
-                    logger.debug(f"Invalid license plate box {license_plate}")
+                    logger.debug(
+                        f"{camera}: Area for license plate box {area(license_plate_box)} is less than min_area {self.config.cameras[camera].lpr.min_area}"
+                    )
                     return
 
                 license_plate_frame = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_I420)
 
-                # Expand the license_plate_box by 30%
+                # Expand the license_plate_box by 10%
                 box_array = np.array(license_plate_box)
-                expansion = (box_array[2:] - box_array[:2]) * 0.30
+                expansion = (box_array[2:] - box_array[:2]) * 0.10
                 expanded_box = np.array(
                     [
                         license_plate_box[0] - expansion[0],
@@ -1170,12 +1417,15 @@ class LicensePlateProcessingMixin:
                     license_plate_frame,
                 )
 
+        logger.debug(f"{camera}: Running plate recognition.")
+
         # run detection, returns results sorted by confidence, best first
         start = datetime.datetime.now().timestamp()
         license_plates, confidences, areas = self._process_license_plate(
-            license_plate_frame
+            camera, id, license_plate_frame
         )
-        self.__update_lpr_metrics(datetime.datetime.now().timestamp() - start)
+        self.plates_rec_second.update()
+        self.plate_rec_speed.update(datetime.datetime.now().timestamp() - start)
 
         if license_plates:
             for plate, confidence, text_area in zip(license_plates, confidences, areas):
@@ -1184,7 +1434,7 @@ class LicensePlateProcessingMixin:
                 )
 
                 logger.debug(
-                    f"Detected text: {plate} (average confidence: {avg_confidence:.2f}, area: {text_area} pixels)"
+                    f"{camera}: Detected text: {plate} (average confidence: {avg_confidence:.2f}, area: {text_area} pixels)"
                 )
         else:
             logger.debug("No text detected")
@@ -1204,12 +1454,15 @@ class LicensePlateProcessingMixin:
         # Check against minimum confidence threshold
         if avg_confidence < self.lpr_config.recognition_threshold:
             logger.debug(
-                f"Average confidence {avg_confidence} is less than threshold ({self.lpr_config.recognition_threshold})"
+                f"{camera}: Average character confidence {avg_confidence} is less than recognition_threshold ({self.lpr_config.recognition_threshold})"
             )
             return
 
-        # For LPR cameras, match or assign plate ID using Jaro-Winkler distance
-        if dedicated_lpr:
+        # For dedicated LPR cameras, match or assign plate ID using Jaro-Winkler distance
+        if (
+            dedicated_lpr
+            and "license_plate" not in self.config.cameras[camera].objects.track
+        ):
             plate_id = None
 
             for existing_id, data in self.detected_license_plates.items():
@@ -1223,7 +1476,7 @@ class LicensePlateProcessingMixin:
                     if similarity >= self.similarity_threshold:
                         plate_id = existing_id
                         logger.debug(
-                            f"Matched plate {top_plate} to {data['plate']} (similarity: {similarity:.3f})"
+                            f"{camera}: Matched plate {top_plate} to {data['plate']} (similarity: {similarity:.3f})"
                         )
                         break
             if plate_id is None:
@@ -1231,11 +1484,11 @@ class LicensePlateProcessingMixin:
                     obj_data, top_plate, avg_confidence
                 )
                 logger.debug(
-                    f"New plate event for dedicated LPR camera {plate_id}: {top_plate}"
+                    f"{camera}: New plate event for dedicated LPR camera {plate_id}: {top_plate}"
                 )
             else:
                 logger.debug(
-                    f"Matched existing plate event for dedicated LPR camera {plate_id}: {top_plate}"
+                    f"{camera}: Matched existing plate event for dedicated LPR camera {plate_id}: {top_plate}"
                 )
                 self.detected_license_plates[plate_id]["last_seen"] = current_time
 
@@ -1246,43 +1499,76 @@ class LicensePlateProcessingMixin:
             if self._should_keep_previous_plate(
                 id, top_plate, top_char_confidences, top_area, avg_confidence
             ):
-                logger.debug("Keeping previous plate")
+                logger.debug(f"{camera}: Keeping previous plate")
                 return
 
         # Determine subLabel based on known plates, use regex matching
         # Default to the detected plate, use label name if there's a match
-        sub_label = next(
-            (
-                label
-                for label, plates in self.lpr_config.known_plates.items()
-                if any(
-                    re.match(f"^{plate}$", top_plate)
-                    or distance(plate, top_plate) <= self.lpr_config.match_distance
-                    for plate in plates
-                )
-            ),
-            None,
-        )
+        try:
+            sub_label = next(
+                (
+                    label
+                    for label, plates in self.lpr_config.known_plates.items()
+                    if any(
+                        re.match(f"^{plate}$", top_plate)
+                        or distance(plate, top_plate) <= self.lpr_config.match_distance
+                        for plate in plates
+                    )
+                ),
+                None,
+            )
+        except re.error:
+            logger.error(
+                f"{camera}: Invalid regex in known plates configuration: {self.lpr_config.known_plates}"
+            )
+            sub_label = None
 
         # If it's a known plate, publish to sub_label
         if sub_label is not None:
             self.sub_label_publisher.publish(
-                EventMetadataTypeEnum.sub_label, (id, sub_label, avg_confidence)
+                (id, sub_label, avg_confidence), EventMetadataTypeEnum.sub_label.value
             )
 
+        # always publish to recognized_license_plate field
+        self.requestor.send_data(
+            "tracked_object_update",
+            json.dumps(
+                {
+                    "type": TrackedObjectUpdateTypesEnum.lpr,
+                    "name": sub_label,
+                    "plate": top_plate,
+                    "score": avg_confidence,
+                    "id": id,
+                    "camera": camera,
+                    "timestamp": start,
+                }
+            ),
+        )
         self.sub_label_publisher.publish(
-            EventMetadataTypeEnum.recognized_license_plate,
-            (id, top_plate, avg_confidence),
+            (id, "recognized_license_plate", top_plate, avg_confidence),
+            EventMetadataTypeEnum.attribute.value,
         )
 
-        if dedicated_lpr:
-            # save the best snapshot
-            logger.debug(f"Writing snapshot for {id}, {top_plate}, {current_time}")
-            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_I420)
-            self.sub_label_publisher.publish(
-                EventMetadataTypeEnum.save_lpr_snapshot,
-                (base64.b64encode(frame_bgr).decode("ASCII"), id, camera),
+        # save the best snapshot for dedicated lpr cams not using frigate+
+        if (
+            dedicated_lpr
+            and "license_plate" not in self.config.cameras[camera].objects.track
+        ):
+            logger.debug(
+                f"{camera}: Writing snapshot for {id}, {top_plate}, {current_time}"
             )
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_I420)
+            _, encoded_img = cv2.imencode(".jpg", frame_bgr)
+            self.sub_label_publisher.publish(
+                (base64.b64encode(encoded_img).decode("ASCII"), id, camera),
+                EventMetadataTypeEnum.save_lpr_snapshot.value,
+            )
+
+        if id not in self.detected_license_plates:
+            if camera not in self.camera_current_cars:
+                self.camera_current_cars[camera] = []
+
+            self.camera_current_cars[camera].append(id)
 
         self.detected_license_plates[id] = {
             "plate": top_plate,
@@ -1293,12 +1579,15 @@ class LicensePlateProcessingMixin:
             "last_seen": current_time if dedicated_lpr else None,
         }
 
-    def handle_request(self, topic, request_data) -> dict[str, any] | None:
+    def handle_request(self, topic, request_data) -> dict[str, Any] | None:
         return
 
-    def expire_object(self, object_id: str):
+    def lpr_expire(self, object_id: str, camera: str):
         if object_id in self.detected_license_plates:
             self.detected_license_plates.pop(object_id)
+
+            if object_id in self.camera_current_cars.get(camera, []):
+                self.camera_current_cars[camera].remove(object_id)
 
 
 class CTCDecoder:
@@ -1310,113 +1599,121 @@ class CTCDecoder:
     for each decoded character sequence.
     """
 
-    def __init__(self):
+    def __init__(self, character_dict_path=None):
         """
-        Initialize the CTCDecoder with a list of characters and a character map.
+        Initializes the CTCDecoder.
+        :param character_dict_path: Path to the character dictionary file.
+                                    If None, a default (English-focused) list is used.
+                                    For Chinese models, this should point to the correct
+                                    character dictionary file provided with the model.
+        """
+        self.characters = []
+        if character_dict_path and os.path.exists(character_dict_path):
+            with open(character_dict_path, "r", encoding="utf-8") as f:
+                self.characters = (
+                    ["blank"] + [line.strip() for line in f if line.strip()] + [" "]
+                )
+        else:
+            self.characters = [
+                "blank",
+                "0",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                ":",
+                ";",
+                "<",
+                "=",
+                ">",
+                "?",
+                "@",
+                "A",
+                "B",
+                "C",
+                "D",
+                "E",
+                "F",
+                "G",
+                "H",
+                "I",
+                "J",
+                "K",
+                "L",
+                "M",
+                "N",
+                "O",
+                "P",
+                "Q",
+                "R",
+                "S",
+                "T",
+                "U",
+                "V",
+                "W",
+                "X",
+                "Y",
+                "Z",
+                "[",
+                "\\",
+                "]",
+                "^",
+                "_",
+                "`",
+                "a",
+                "b",
+                "c",
+                "d",
+                "e",
+                "f",
+                "g",
+                "h",
+                "i",
+                "j",
+                "k",
+                "l",
+                "m",
+                "n",
+                "o",
+                "p",
+                "q",
+                "r",
+                "s",
+                "t",
+                "u",
+                "v",
+                "w",
+                "x",
+                "y",
+                "z",
+                "{",
+                "|",
+                "}",
+                "~",
+                "!",
+                '"',
+                "#",
+                "$",
+                "%",
+                "&",
+                "'",
+                "(",
+                ")",
+                "*",
+                "+",
+                ",",
+                "-",
+                ".",
+                "/",
+                " ",
+                " ",
+            ]
 
-        The character set includes digits, letters, special characters, and a "blank" token
-        (used by the CTC model for decoding purposes). A character map is created to map
-        indices to characters.
-        """
-        self.characters = [
-            "blank",
-            "0",
-            "1",
-            "2",
-            "3",
-            "4",
-            "5",
-            "6",
-            "7",
-            "8",
-            "9",
-            ":",
-            ";",
-            "<",
-            "=",
-            ">",
-            "?",
-            "@",
-            "A",
-            "B",
-            "C",
-            "D",
-            "E",
-            "F",
-            "G",
-            "H",
-            "I",
-            "J",
-            "K",
-            "L",
-            "M",
-            "N",
-            "O",
-            "P",
-            "Q",
-            "R",
-            "S",
-            "T",
-            "U",
-            "V",
-            "W",
-            "X",
-            "Y",
-            "Z",
-            "[",
-            "\\",
-            "]",
-            "^",
-            "_",
-            "`",
-            "a",
-            "b",
-            "c",
-            "d",
-            "e",
-            "f",
-            "g",
-            "h",
-            "i",
-            "j",
-            "k",
-            "l",
-            "m",
-            "n",
-            "o",
-            "p",
-            "q",
-            "r",
-            "s",
-            "t",
-            "u",
-            "v",
-            "w",
-            "x",
-            "y",
-            "z",
-            "{",
-            "|",
-            "}",
-            "~",
-            "!",
-            '"',
-            "#",
-            "$",
-            "%",
-            "&",
-            "'",
-            "(",
-            ")",
-            "*",
-            "+",
-            ",",
-            "-",
-            ".",
-            "/",
-            " ",
-            " ",
-        ]
         self.char_map = {i: char for i, char in enumerate(self.characters)}
 
     def __call__(
@@ -1450,7 +1747,7 @@ class CTCDecoder:
                     merged_path.append(char_index)
                     merged_probs.append(seq_log_probs[t, char_index])
 
-            result = "".join(self.char_map[idx] for idx in merged_path)
+            result = "".join(self.char_map.get(idx, "") for idx in merged_path)
             results.append(result)
 
             confidence = np.exp(merged_probs).tolist()

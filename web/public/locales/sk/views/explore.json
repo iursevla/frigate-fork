@@ -1,0 +1,84 @@
+{
+  "documentTitle": "Preskúmať - Frigate",
+  "generativeAI": "Generatívna AI",
+  "details": {
+    "timestamp": "Časová pečiatka"
+  },
+  "exploreMore": "Preskumať viac {{label}} objektov",
+  "exploreIsUnavailable": {
+    "title": "Preskúmanie nie je k dispozícii",
+    "embeddingsReindexing": {
+      "context": "Preskúmanie je možné použiť po dokončení opätovného indexovania vložených sledovaných objektov.",
+      "startingUp": "Spúšťanie…",
+      "estimatedTime": "Odhadovaný zostávajúci čas:",
+      "finishingShortly": "Čoskoro končí",
+      "step": {
+        "thumbnailsEmbedded": "Vložené miniatúry: ",
+        "descriptionsEmbedded": "Vložené popisy: ",
+        "trackedObjectsProcessed": "Spracované sledované objekty: "
+      }
+    },
+    "downloadingModels": {
+      "context": "Frigate sťahuje potrebné modely vkladania na podporu funkcie sémantického vyhľadávania. V závislosti od rýchlosti vášho sieťového pripojenia to môže trvať niekoľko minút.",
+      "setup": {
+        "visionModel": "Model vízie",
+        "visionModelFeatureExtractor": "Extraktor prvkov modelu videnia",
+        "textModel": "Textový model",
+        "textTokenizer": "Textový tokenizér"
+      },
+      "tips": {
+        "context": "Po stiahnutí modelov možno budete chcieť znova indexovať vloženia sledovaných objektov.",
+        "documentation": "Prečítajte si dokumentáciu"
+      },
+      "error": "Vyskytla sa chyba. Skontrolujte protokoly Fregaty."
+    }
+  },
+  "trackedObjectDetails": "Podrobnosti sledovaného objektu",
+  "type": {
+    "details": "detaily",
+    "snapshot": "snímka",
+    "video": "video",
+    "object_lifecycle": "životný cyklus objektu"
+  },
+  "objectLifecycle": {
+    "title": "Životný cyklus Objektu",
+    "noImageFound": "Žiadny obrázok pre túto časovú pečiatku.",
+    "createObjectMask": "Vytvoriť masku objektu",
+    "adjustAnnotationSettings": "Upravte nastavenia anotácií",
+    "scrollViewTips": "Posúvaním zobrazíte významné momenty životného cyklu tohto objektu.",
+    "autoTrackingTips": "Pozície ohraničujúcich rámčekov budú pre kamery s automatickým sledovaním nepresné.",
+    "count": "{{first}} z {{second}}",
+    "trackedPoint": "Sledovaný bod",
+    "lifecycleItemDesc": {
+      "visible": "Zistený {{label}}",
+      "entered_zone": "{{label}} vstúpil do {{zones}}",
+      "active": "{{label}} sa stal aktívnym",
+      "stationary": "{{label}} sa zastavil",
+      "attribute": {
+        "faceOrLicense_plate": "Pre {{label}} bol zistený {{attribute}}",
+        "other": "{{label}} rozpoznané ako {{attribute}}"
+      },
+      "gone": "{{label}} zostalo",
+      "heard": "{{label}} počul",
+      "external": "Zistený {{label}}",
+      "header": {
+        "zones": "Zóny",
+        "ratio": "Pomer",
+        "area": "Oblasť"
+      }
+    },
+    "annotationSettings": {
+      "title": "Nastavenia anotácií",
+      "showAllZones": {
+        "title": "Zobraziť všetky zóny",
+        "desc": "Vždy zobrazovať zóny na rámoch, do ktorých objekty vstúpili."
+      },
+      "offset": {
+        "label": "Odsadenie anotácie",
+        "desc": "Tieto údaje pochádzajú z detekčného kanála vašej kamery, ale prekrývajú sa s obrázkami zo záznamového kanála. Je nepravdepodobné, že tieto dva streamy sú dokonale synchronizované. V dôsledku toho sa ohraničujúci rámček a zábery nebudú dokonale zarovnané. Na úpravu tohto posunu je však možné použiť pole <code>annotation_offset</code>.",
+        "documentation": "Prečítajte si dokumentáciu ",
+        "millisecondsToOffset": "Milisekundy na posunutie detekcie anotácií. <em>Predvolené: 0</em>"
+      }
+    }
+  }
+}

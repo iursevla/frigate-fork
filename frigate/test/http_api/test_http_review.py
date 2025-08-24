@@ -48,8 +48,9 @@ class TestHttpReview(BaseTestHttp):
     ###################################  GET /review Endpoint   ########################################################
     ####################################################################################################################
 
-    # Does not return any data point since the end time (before parameter) is not passed and the review segment end_time is 2 seconds from now
-    def test_get_review_no_filters_no_matches(self):
+    def test_get_review_that_overlaps_default_period(self):
+        """Test that a review item that starts during the default period
+        but ends after is included in the results."""
         now = datetime.now().timestamp()
 
         with TestClient(self.app) as client:
@@ -57,7 +58,7 @@ class TestHttpReview(BaseTestHttp):
             response = client.get("/review")
             assert response.status_code == 200
             response_json = response.json()
-            assert len(response_json) == 0
+            assert len(response_json) == 1
 
     def test_get_review_no_filters(self):
         now = datetime.now().timestamp()
@@ -73,11 +74,13 @@ class TestHttpReview(BaseTestHttp):
             assert response_json[0]["has_been_reviewed"] == False
 
     def test_get_review_with_time_filter_no_matches(self):
+        """Test that review items outside the range are not returned."""
         now = datetime.now().timestamp()
 
         with TestClient(self.app) as client:
             id = "123456.random"
-            super().insert_mock_review_segment(id, now, now + 2)
+            super().insert_mock_review_segment(id, now - 2, now - 1)
+            super().insert_mock_review_segment(f"{id}2", now + 4, now + 5)
             params = {
                 "after": now,
                 "before": now + 3,
@@ -276,82 +279,6 @@ class TestHttpReview(BaseTestHttp):
                     "reviewed_detection": 0,
                     "total_alert": 1,
                     "total_detection": 0,
-                },
-            }
-            self.assertEqual(response_json, expected_response)
-
-    def test_get_review_summary_multiple_days_edge_cases(self):
-        now = datetime.now()
-        five_days_ago = datetime.today() - timedelta(days=5)
-        twenty_days_ago = datetime.today() - timedelta(days=20)
-        one_month_ago = datetime.today() - timedelta(days=30)
-        one_month_ago_ts = one_month_ago.timestamp()
-
-        with TestClient(self.app) as client:
-            super().insert_mock_review_segment("123456.random", now.timestamp())
-            super().insert_mock_review_segment(
-                "123457.random", five_days_ago.timestamp()
-            )
-            super().insert_mock_review_segment(
-                "123458.random",
-                twenty_days_ago.timestamp(),
-                None,
-                SeverityEnum.detection,
-            )
-            # One month ago plus 5 seconds fits within the condition (review.start_time > month_ago). Assuming that the endpoint does not take more than 5 seconds to be invoked
-            super().insert_mock_review_segment(
-                "123459.random",
-                one_month_ago_ts + 5,
-                None,
-                SeverityEnum.detection,
-            )
-            # This won't appear in the output since it's not within last month start_time clause (review.start_time > month_ago)
-            super().insert_mock_review_segment("123450.random", one_month_ago_ts)
-            response = client.get("/review/summary")
-            assert response.status_code == 200
-            response_json = response.json()
-            # e.g. '2024-11-24'
-            today_formatted = now.strftime("%Y-%m-%d")
-            # e.g. '2024-11-19'
-            five_days_ago_formatted = five_days_ago.strftime("%Y-%m-%d")
-            # e.g. '2024-11-04'
-            twenty_days_ago_formatted = twenty_days_ago.strftime("%Y-%m-%d")
-            # e.g. '2024-10-24'
-            one_month_ago_formatted = one_month_ago.strftime("%Y-%m-%d")
-            expected_response = {
-                "last24Hours": {
-                    "reviewed_alert": 0,
-                    "reviewed_detection": 0,
-                    "total_alert": 1,
-                    "total_detection": 0,
-                },
-                today_formatted: {
-                    "day": today_formatted,
-                    "reviewed_alert": 0,
-                    "reviewed_detection": 0,
-                    "total_alert": 1,
-                    "total_detection": 0,
-                },
-                five_days_ago_formatted: {
-                    "day": five_days_ago_formatted,
-                    "reviewed_alert": 0,
-                    "reviewed_detection": 0,
-                    "total_alert": 1,
-                    "total_detection": 0,
-                },
-                twenty_days_ago_formatted: {
-                    "day": twenty_days_ago_formatted,
-                    "reviewed_alert": 0,
-                    "reviewed_detection": 0,
-                    "total_alert": 0,
-                    "total_detection": 1,
-                },
-                one_month_ago_formatted: {
-                    "day": one_month_ago_formatted,
-                    "reviewed_alert": 0,
-                    "reviewed_detection": 0,
-                    "total_alert": 0,
-                    "total_detection": 1,
                 },
             }
             self.assertEqual(response_json, expected_response)

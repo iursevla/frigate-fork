@@ -3,7 +3,7 @@ from typing import TypedDict
 
 from frigate.camera import CameraMetrics
 from frigate.data_processing.types import DataProcessorMetrics
-from frigate.object_detection import ObjectDetectProcess
+from frigate.object_detection.base import ObjectDetectProcess
 
 
 class StatsTrackingTypes(TypedDict):
@@ -21,7 +21,11 @@ class ModelStatusTypesEnum(str, Enum):
     downloading = "downloading"
     downloaded = "downloaded"
     error = "error"
+    training = "training"
+    complete = "complete"
 
 
 class TrackedObjectUpdateTypesEnum(str, Enum):
     description = "description"
+    face = "face"
+    lpr = "lpr"

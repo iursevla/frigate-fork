@@ -1,0 +1,90 @@
+{
+  "time": {
+    "untilForTime": "Do{{time}}",
+    "untilForRestart": "Do reštartu Frigate.",
+    "untilRestart": "Do reštartu",
+    "ago": "{{timeAgo}} pred časom",
+    "justNow": "Práve teraz",
+    "today": "Dnes",
+    "yesterday": "Včera",
+    "last7": "Posledných 7 dní",
+    "last14": "Posledných 14 dní",
+    "last30": "Posledných 30 dní",
+    "thisWeek": "Tento týždeň",
+    "lastWeek": "Minulý týždeň",
+    "thisMonth": "Tento mesiac",
+    "lastMonth": "Minulý mesiac",
+    "5minutes": "5 minút",
+    "10minutes": "10 minút",
+    "30minutes": "30 minút",
+    "1hour": "1 hodina",
+    "12hours": "12 hodín",
+    "24hours": "24 hodín",
+    "am": "ráno",
+    "yr": "{{time}}r",
+    "pm": "popoludní",
+    "year_one": "{{time}}rok",
+    "year_few": "{{time}}rokov",
+    "year_other": "{{time}}rokov",
+    "mo": "{{time}}mes",
+    "month_one": "{{time}}mesiac",
+    "month_few": "{{time}} mesiace",
+    "month_other": "{{time}} mesiaca",
+    "d": "{{time}}d",
+    "day_one": "{{time}}deň",
+    "day_few": "{{time}}dni",
+    "day_other": "{{time}}dni",
+    "h": "{{time}}h",
+    "hour_one": "{{time}}hodina",
+    "hour_few": "{{time}}hodiny",
+    "hour_other": "{{time}}hodin",
+    "m": "{{time}} min",
+    "s": "{{time}}s",
+    "minute_one": "{{time}}minuta",
+    "minute_few": "{{time}}minuty",
+    "minute_other": "{{time}}minut",
+    "second_one": "{{time}}sekunda",
+    "second_few": "{{time}}sekundy",
+    "second_other": "{{time}}sekund",
+    "formattedTimestamp": {
+      "12hour": "Deň MMM, h:mm:ss aaa",
+      "24hour": "Deň MMM, HH:mm:ss"
+    },
+    "formattedTimestamp2": {
+      "12hour": "MM/dd h:mm:ssa",
+      "24hour": "d MMM HH:mm:ss"
+    },
+    "formattedTimestampHourMinute": {
+      "12hour": "h:mm aaa",
+      "24hour": "HH:mm"
+    },
+    "formattedTimestampHourMinuteSecond": {
+      "12hour": "h:mm:ss aaa",
+      "24hour": "HH:mm:ss"
+    },
+    "formattedTimestampMonthDayHourMinute": {
+      "12hour": "MMM d, h:mm aaa",
+      "24hour": "MMM d, HH:mm"
+    },
+    "formattedTimestampMonthDayYear": {
+      "12hour": "MMM d, yyyy",
+      "24hour": "MMM d, yyyy"
+    },
+    "formattedTimestampMonthDayYearHourMinute": {
+      "12hour": "MMM d yyyy, h:mm aaa",
+      "24hour": "MMM d yyyy, HH:mm"
+    },
+    "formattedTimestampMonthDay": "MMM d",
+    "formattedTimestampFilename": {
+      "12hour": "MM-dd-yy-h-mm-ss-a",
+      "24hour": "MM-dd-yy-HH-mm-ss"
+    }
+  },
+  "selectItem": "Vyberte {{item}}",
+  "unit": {
+    "speed": {
+      "mph": "mph"
+    }
+  },
+  "readTheDocumentation": "Prečítajte si dokumentáciu"
+}

@@ -4,15 +4,17 @@ import ast
 import copy
 import datetime
 import logging
-import multiprocessing as mp
+import math
+import multiprocessing.queues
 import queue
 import re
 import shlex
 import struct
 import urllib.parse
 from collections.abc import Mapping
+from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 from zoneinfo import ZoneInfoNotFoundError
 
 import numpy as np
@@ -26,16 +28,16 @@ logger = logging.getLogger(__name__)
 
 
 class EventsPerSecond:
-    def __init__(self, max_events=1000, last_n_seconds=10):
+    def __init__(self, max_events=1000, last_n_seconds=10) -> None:
         self._start = None
         self._max_events = max_events
         self._last_n_seconds = last_n_seconds
         self._timestamps = []
 
-    def start(self):
+    def start(self) -> None:
         self._start = datetime.datetime.now().timestamp()
 
-    def update(self):
+    def update(self) -> None:
         now = datetime.datetime.now().timestamp()
         if self._start is None:
             self._start = now
@@ -45,7 +47,7 @@ class EventsPerSecond:
             self._timestamps = self._timestamps[(1 - self._max_events) :]
         self.expire_timestamps(now)
 
-    def eps(self):
+    def eps(self) -> float:
         now = datetime.datetime.now().timestamp()
         if self._start is None:
             self._start = now
@@ -58,10 +60,27 @@ class EventsPerSecond:
         return len(self._timestamps) / seconds
 
     # remove aged out timestamps
-    def expire_timestamps(self, now):
+    def expire_timestamps(self, now: float) -> None:
         threshold = now - self._last_n_seconds
         while self._timestamps and self._timestamps[0] < threshold:
             del self._timestamps[0]
+
+
+class InferenceSpeed:
+    def __init__(self, metric: Synchronized) -> None:
+        self.__metric = metric
+        self.__initialized = False
+
+    def update(self, inference_time: float) -> None:
+        if not self.__initialized:
+            self.__metric.value = inference_time
+            self.__initialized = True
+            return
+
+        self.__metric.value = (self.__metric.value * 9 + inference_time) / 10
+
+    def current(self) -> float:
+        return self.__metric.value
 
 
 def deep_merge(dct1: dict, dct2: dict, override=False, merge_lists=False) -> dict:
@@ -138,7 +157,7 @@ def load_labels(path: Optional[str], encoding="utf-8", prefill=91):
         return labels
 
 
-def get_tz_modifiers(tz_name: str) -> Tuple[str, str, int]:
+def get_tz_modifiers(tz_name: str) -> Tuple[str, str, float]:
     seconds_offset = (
         datetime.datetime.now(pytz.timezone(tz_name)).utcoffset().total_seconds()
     )
@@ -151,7 +170,7 @@ def get_tz_modifiers(tz_name: str) -> Tuple[str, str, int]:
 
 def to_relative_box(
     width: int, height: int, box: Tuple[int, int, int, int]
-) -> Tuple[int, int, int, int]:
+) -> Tuple[int | float, int | float, int | float, int | float]:
     return (
         box[0] / width,  # x
         box[1] / height,  # y
@@ -165,22 +184,12 @@ def create_mask(frame_shape, mask):
     mask_img[:] = 255
 
 
-def update_yaml_from_url(file_path, url):
-    parsed_url = urllib.parse.urlparse(url)
-    query_string = urllib.parse.parse_qs(parsed_url.query, keep_blank_values=True)
-
+def process_config_query_string(query_string: Dict[str, list]) -> Dict[str, Any]:
+    updates = {}
     for key_path_str, new_value_list in query_string.items():
-        key_path = key_path_str.split(".")
-        for i in range(len(key_path)):
-            try:
-                index = int(key_path[i])
-                key_path[i] = (key_path[i - 1], index)
-                key_path.pop(i - 1)
-            except ValueError:
-                pass
-
+        # use the string key as-is for updates dictionary
         if len(new_value_list) > 1:
-            update_yaml_file(file_path, key_path, new_value_list)
+            updates[key_path_str] = new_value_list
         else:
             value = new_value_list[0]
             try:
@@ -188,10 +197,24 @@ def update_yaml_from_url(file_path, url):
                 value = ast.literal_eval(value) if "," not in value else value
             except (ValueError, SyntaxError):
                 pass
-            update_yaml_file(file_path, key_path, value)
+            updates[key_path_str] = value
+    return updates
 
 
-def update_yaml_file(file_path, key_path, new_value):
+def flatten_config_data(
+    config_data: Dict[str, Any], parent_key: str = ""
+) -> Dict[str, Any]:
+    items = []
+    for key, value in config_data.items():
+        new_key = f"{parent_key}.{key}" if parent_key else key
+        if isinstance(value, dict):
+            items.extend(flatten_config_data(value, new_key).items())
+        else:
+            items.append((new_key, value))
+    return dict(items)
+
+
+def update_yaml_file_bulk(file_path: str, updates: Dict[str, Any]):
     yaml = YAML()
     yaml.indent(mapping=2, sequence=4, offset=2)
 
@@ -204,7 +227,17 @@ def update_yaml_file(file_path, key_path, new_value):
         )
         return
 
-    data = update_yaml(data, key_path, new_value)
+    # Apply all updates
+    for key_path_str, new_value in updates.items():
+        key_path = key_path_str.split(".")
+        for i in range(len(key_path)):
+            try:
+                index = int(key_path[i])
+                key_path[i] = (key_path[i - 1], index)
+                key_path.pop(i - 1)
+            except ValueError:
+                pass
+        data = update_yaml(data, key_path, new_value)
 
     try:
         with open(file_path, "w") as f:
@@ -305,14 +338,24 @@ def clear_and_unlink(file: Path, missing_ok: bool = True) -> None:
     file.unlink(missing_ok=missing_ok)
 
 
-def empty_and_close_queue(q: mp.Queue):
+def empty_and_close_queue(q):
     while True:
         try:
             q.get(block=True, timeout=0.5)
-        except queue.Empty:
+        except (queue.Empty, EOFError):
+            break
+        except Exception as e:
+            logger.debug(f"Error while emptying queue: {e}")
+            break
+
+    # close the queue if it is a multiprocessing queue
+    # manager proxy queues do not have close or join_thread method
+    if isinstance(q, multiprocessing.queues.Queue):
+        try:
             q.close()
             q.join_thread()
-            return
+        except Exception:
+            pass
 
 
 def generate_color_palette(n):
@@ -378,3 +421,26 @@ def serialize(
 def deserialize(bytes_data: bytes) -> list[float]:
     """Deserializes a compact "raw bytes" format into a list of floats"""
     return list(struct.unpack("%sf" % (len(bytes_data) // 4), bytes_data))
+
+
+def sanitize_float(value):
+    """Replace NaN or inf with 0.0."""
+    if isinstance(value, (int, float)) and not math.isfinite(value):
+        return 0.0
+    return value
+
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    return 1 - cosine_distance(a, b)
+
+
+def cosine_distance(a: np.ndarray, b: np.ndarray) -> float:
+    """Returns cosine distance to match sqlite-vec's calculation."""
+    dot = np.dot(a, b)
+    a_mag = np.dot(a, a)  # ||a||^2
+    b_mag = np.dot(b, b)  # ||b||^2
+
+    if a_mag == 0 or b_mag == 0:
+        return 1.0
+
+    return 1.0 - (dot / (np.sqrt(a_mag) * np.sqrt(b_mag)))

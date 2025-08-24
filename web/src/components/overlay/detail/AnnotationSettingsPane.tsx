@@ -27,6 +27,7 @@ import ActivityIndicator from "@/components/indicators/activity-indicator";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Trans, useTranslation } from "react-i18next";
+import { useDocDomain } from "@/hooks/use-doc-domain";
 
 type AnnotationSettingsPaneProps = {
   event: Event;
@@ -43,6 +44,7 @@ export function AnnotationSettingsPane({
   setAnnotationOffset,
 }: AnnotationSettingsPaneProps) {
   const { t } = useTranslation(["views/explore"]);
+  const { getLocaleDocUrl } = useDocDomain();
 
   const { data: config, mutate: updateConfig } =
     useSWR<FrigateConfig>("config");
@@ -77,7 +79,9 @@ export function AnnotationSettingsPane({
         .then((res) => {
           if (res.status === 200) {
             toast.success(
-              `Annotation offset for ${event?.camera} has been saved to the config file. Restart Frigate to apply your changes.`,
+              t("objectLifecycle.annotationSettings.offset.toast.success", {
+                camera: event?.camera,
+              }),
               {
                 position: "top-center",
               },
@@ -178,14 +182,12 @@ export function AnnotationSettingsPane({
                       </Trans>
                       <div className="mt-2 flex items-center text-primary">
                         <Link
-                          to="https://docs.frigate.video/configuration/reference"
+                          to={getLocaleDocUrl("configuration/reference")}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline"
                         >
-                          {t(
-                            "objectLifecycle.annotationSettings.offset.documentation",
-                          )}
+                          {t("readTheDocumentation", { ns: "common" })}
                           <LuExternalLink className="ml-2 inline-flex size-3" />
                         </Link>
                       </div>
@@ -200,9 +202,9 @@ export function AnnotationSettingsPane({
                       />
                     </FormControl>
                     <FormDescription>
-                      {t(
-                        "objectLifecycle.annotationSettings.offset.millisecondsToOffset",
-                      )}
+                      <Trans ns="views/explore">
+                        objectLifecycle.annotationSettings.offset.millisecondsToOffset
+                      </Trans>
                       <div className="mt-2">
                         {t("objectLifecycle.annotationSettings.offset.tips")}
                       </div>

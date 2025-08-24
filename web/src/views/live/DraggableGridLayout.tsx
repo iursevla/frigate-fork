@@ -563,9 +563,12 @@ export default function DraggableGridLayout({
               const streamName = streamExists
                 ? streamNameFromSettings
                 : firstStreamEntry;
+              const streamType =
+                currentGroupStreamingSettings?.[camera.name]?.streamType;
               const autoLive =
-                currentGroupStreamingSettings?.[camera.name]?.streamType !==
-                "no-streaming";
+                streamType !== undefined
+                  ? streamType !== "no-streaming"
+                  : undefined;
               const showStillWithoutActivity =
                 currentGroupStreamingSettings?.[camera.name]?.streamType !==
                 "continuous";
@@ -582,7 +585,8 @@ export default function DraggableGridLayout({
                   preferredLiveMode={preferredLiveModes[camera.name] ?? "mse"}
                   isRestreamed={isRestreamedStates[camera.name]}
                   supportsAudio={
-                    supportsAudioOutputStates[streamName].supportsAudio
+                    supportsAudioOutputStates[streamName]?.supportsAudio ??
+                    false
                   }
                   audioState={audioStates[camera.name]}
                   toggleAudio={() => toggleAudio(camera.name)}
